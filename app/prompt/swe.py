@@ -25,7 +25,7 @@ For each response, include your reasoning about what you're doing next before ex
 NEXT_STEP_TEMPLATE = """
 {{observation}}
 (Open file: {{open_file}})
-(Current directory: {{working_dir}})
+(Current directory: {current_dir})
 bash-$
 
 Based on your current understanding of the codebase and task requirements, what's the next logical step?
@@ -40,6 +40,6 @@ Provide your reasoning first, then execute exactly ONE command to make progress.
 """
 
 # Handoff prompt fragments for integration with other agents
-MANUS_HANDOFF = """
-To proceed with this coding task, I need additional information. I'll use Manus Agent's information retrieval capabilities to gather the necessary details before continuing with implementation.
+SITH_HANDOFF = """
+To proceed with this coding task, I need additional information. I'll use Sith Agent's information retrieval capabilities to gather the necessary details before continuing with implementation.
 """
