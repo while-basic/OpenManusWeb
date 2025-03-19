@@ -163,14 +163,68 @@ class PlanningFlow(BaseFlow):
                             logger.error(f"Failed to parse tool arguments: {args}")
                             continue
 
-                    # Ensure plan_id is set correctly and execute the tool
+                    # Ensure plan_id is set correctly
                     args["plan_id"] = self.active_plan_id
-
-                    # Execute the tool via ToolCollection instead of directly
-                    result = await self.planning_tool.execute(**args)
-
-                    logger.info(f"Plan creation result: {str(result)}")
-                    return
+                    
+                    # Check if steps exists and handle complex structures
+                    if "steps" in args:
+                        # If steps is not a list of strings, try to convert it
+                        if not (isinstance(args["steps"], list) and 
+                               all(isinstance(s, str) for s in args["steps"])):
+                            
+                            logger.warning(f"Converting complex steps structure to string list: {args['steps']}")
+                            
+                            # Handle different formats LLMs might return
+                            if isinstance(args["steps"], list):
+                                # Complex array with objects
+                                new_steps = []
+                                
+                                for step in args["steps"]:
+                                    if isinstance(step, dict):
+                                        # Try to extract relevant info from step object
+                                        if "day" in step and "activities" in step:
+                                            # Format like: "Day X: Activity 1, Activity 2"
+                                            day = step.get("day")
+                                            location = step.get("location", "")
+                                            activities = step.get("activities", [])
+                                            
+                                            if isinstance(day, list):
+                                                day_str = f"Days {'-'.join(str(d) for d in day)}"
+                                            else:
+                                                day_str = f"Day {day}"
+                                                
+                                            if location:
+                                                step_str = f"{day_str} ({location}): "
+                                            else:
+                                                step_str = f"{day_str}: "
+                                                
+                                            if isinstance(activities, list):
+                                                step_str += ", ".join(activities)
+                                            else:
+                                                step_str += str(activities)
+                                                
+                                            new_steps.append(step_str)
+                                        elif "text" in step:
+                                            new_steps.append(step["text"])
+                                        else:
+                                            # Fallback: convert the whole object to a string
+                                            new_steps.append(json.dumps(step))
+                                    elif isinstance(step, str):
+                                        new_steps.append(step)
+                                
+                                args["steps"] = new_steps
+                            else:
+                                # Not a list at all - create a default list
+                                args["steps"] = ["Analyze request", "Execute task", "Verify results"]
+                    
+                    # Execute the tool via ToolCollection
+                    try:
+                        result = await self.planning_tool.execute(**args)
+                        logger.info(f"Plan creation result: {str(result)}")
+                        return
+                    except Exception as e:
+                        logger.error(f"Error executing planning tool: {e}")
+                        # Fall through to default plan creation
 
         # If execution reached here, create a default plan
         logger.warning("Creating default plan")

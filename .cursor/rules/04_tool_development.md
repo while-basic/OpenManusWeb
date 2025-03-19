@@ -1,0 +1,43 @@
+# Tool Development Guidelines
+
+## Structure
+- Inherit from BaseTool for all tools
+- Follow the established pattern for tool parameters
+- Implement both sync and async versions when appropriate
+- Keep tools focused on a single responsibility
+
+## Documentation
+- Document all tool parameters thoroughly
+- Provide examples of tool usage
+- Document expected responses
+- Include error handling instructions
+
+## Error Handling
+- Use ToolError for tool-specific exceptions
+- Provide clear error messages
+- Include debugging information when possible
+- Fail gracefully and provide fallback options
+
+## Testing
+- Write unit tests for all tools
+- Include integration tests for complex tools
+- Test with various input combinations
+- Mock external dependencies
+
+## Parameters
+- Use strong typing with Pydantic models
+- Validate parameters before processing
+- Provide sensible defaults when possible
+- Document required vs optional parameters
+
+## Security
+- Sanitize inputs to prevent injection attacks
+- Limit access to sensitive operations
+- Avoid exposing credentials in responses
+- Follow principle of least privilege
+
+## Performance
+- Implement caching when appropriate
+- Use async for I/O bound operations
+- Optimize resource usage
+- Implement timeouts for external calls 

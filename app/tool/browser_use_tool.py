@@ -1,7 +1,8 @@
 import asyncio
 import json
 import logging  # 添加导入
-from typing import Optional
+import time
+from typing import Optional, Union
 
 from browser_use import Browser as BrowserUseBrowser
 from browser_use import BrowserConfig
@@ -114,11 +115,11 @@ class BrowserUseTool(BaseTool):
         self,
         action: str,
         url: Optional[str] = None,
-        index: Optional[int] = None,
+        index: Optional[Union[int, str]] = None,
         text: Optional[str] = None,
         script: Optional[str] = None,
-        scroll_amount: Optional[int] = None,
-        tab_id: Optional[int] = None,
+        scroll_amount: Optional[Union[int, str]] = None,
+        tab_id: Optional[Union[int, str]] = None,
         **kwargs,
     ) -> ToolResult:
         """
@@ -127,16 +128,39 @@ class BrowserUseTool(BaseTool):
         Args:
             action: The browser action to perform
             url: URL for navigation or new tab
-            index: Element index for click or input actions
+            index: Element index for click or input actions (can be int or str)
             text: Text for input action
             script: JavaScript code for execution
-            scroll_amount: Pixels to scroll for scroll action
-            tab_id: Tab ID for switch_tab action
+            scroll_amount: Pixels to scroll for scroll action (can be int or str)
+            tab_id: Tab ID for switch_tab action (can be int or str)
             **kwargs: Additional arguments
 
         Returns:
             ToolResult with the action's output or error
         """
+        # Convert string parameters to appropriate types if needed
+        index_int = None
+        scroll_amount_int = None
+        tab_id_int = None
+        
+        if index is not None:
+            try:
+                index_int = int(index)
+            except (ValueError, TypeError) as e:
+                return ToolResult(error=f"Invalid index: {index}. Error: {e}")
+                
+        if scroll_amount is not None:
+            try:
+                scroll_amount_int = int(scroll_amount)
+            except (ValueError, TypeError) as e:
+                return ToolResult(error=f"Invalid scroll_amount: {scroll_amount}. Error: {e}")
+                
+        if tab_id is not None:
+            try:
+                tab_id_int = int(tab_id)
+            except (ValueError, TypeError) as e:
+                return ToolResult(error=f"Invalid tab_id: {tab_id}. Error: {e}")
+        
         async with self.lock:
             try:
                 context = await self._ensure_browser_initialized()
@@ -144,154 +168,187 @@ class BrowserUseTool(BaseTool):
                 if action == "navigate":
                     if not url:
                         return ToolResult(error="URL is required for 'navigate' action")
-                    await context.navigate_to(url)
+                    await context.navigate(url)
                     return ToolResult(output=f"Navigated to {url}")
 
                 elif action == "click":
-                    if index is None:
+                    if index_int is None:
                         return ToolResult(error="Index is required for 'click' action")
-                    element = await context.get_dom_element_by_index(index)
+                    element = await context.get_dom_element_by_index(index_int)
                     if not element:
-                        return ToolResult(error=f"Element with index {index} not found")
+                        return ToolResult(error=f"Element with index {index_int} not found")
                     download_path = await context._click_element_node(element)
-                    output = f"Clicked element at index {index}"
+                    output = f"Clicked element at index {index_int}"
                     if download_path:
                         output += f" - Downloaded file to {download_path}"
                     return ToolResult(output=output)
 
                 elif action == "input_text":
-                    if index is None or not text:
+                    if index_int is None or not text:
                         return ToolResult(
                             error="Index and text are required for 'input_text' action"
                         )
-                    element = await context.get_dom_element_by_index(index)
+                    element = await context.get_dom_element_by_index(index_int)
                     if not element:
-                        return ToolResult(error=f"Element with index {index} not found")
+                        return ToolResult(error=f"Element with index {index_int} not found")
                     await context._input_text_element_node(element, text)
                     return ToolResult(
-                        output=f"Input '{text}' into element at index {index}"
+                        output=f"Input '{text}' into element at index {index_int}"
                     )
 
                 elif action == "screenshot":
-                    screenshot = await context.take_screenshot(full_page=True)
+                    # Add temporary filename generation if not provided
+                    filename = f"screenshot_{int(time.time())}.png"
+                    path = await context.take_screenshot(filename)
                     return ToolResult(
-                        output=f"Screenshot captured (base64 length: {len(screenshot)})",
-                        system=screenshot,
+                        output=f"Screenshot saved to {path}", file_paths=[path]
                     )
 
                 elif action == "get_html":
-                    html = await context.get_page_html()
-                    truncated = html[:2000] + "..." if len(html) > 2000 else html
-                    return ToolResult(output=truncated)
+                    html = await context.get_content()
+                    return ToolResult(
+                        output=f"Retrieved HTML content ({len(html)} characters)"
+                    )
 
                 elif action == "get_text":
-                    text = await context.execute_javascript("document.body.innerText")
+                    text = await context.get_text_content()
                     return ToolResult(output=text)
 
                 elif action == "read_links":
-                    links = await context.execute_javascript(
-                        "document.querySelectorAll('a[href]').forEach((elem) => {if (elem.innerText) {console.log(elem.innerText, elem.href)}})"
-                    )
-                    return ToolResult(output=links)
+                    links = await context.get_link_elements()
+                    formatted_links = []
+                    for i, link in enumerate(links):
+                        text = await link.get_text() or "[No text]"
+                        href = await link.get_attribute("href") or "[No href]"
+                        formatted_links.append(f"[{i}] {text}: {href}")
+                    if not formatted_links:
+                        return ToolResult(output="No links found on the page.")
+                    return ToolResult(output="\n".join(formatted_links))
 
                 elif action == "execute_js":
                     if not script:
-                        return ToolResult(
-                            error="Script is required for 'execute_js' action"
-                        )
+                        return ToolResult(error="JavaScript code is required for 'execute_js' action")
                     result = await context.execute_javascript(script)
-                    return ToolResult(output=str(result))
+                    return ToolResult(
+                        output=f"Executed JavaScript with result: {str(result)}"
+                    )
 
                 elif action == "scroll":
-                    if scroll_amount is None:
+                    if scroll_amount_int is None:
                         return ToolResult(
                             error="Scroll amount is required for 'scroll' action"
                         )
                     await context.execute_javascript(
-                        f"window.scrollBy(0, {scroll_amount});"
+                        f"window.scrollBy(0, {scroll_amount_int});"
                     )
-                    direction = "down" if scroll_amount > 0 else "up"
+                    direction = "down" if scroll_amount_int > 0 else "up"
                     return ToolResult(
-                        output=f"Scrolled {direction} by {abs(scroll_amount)} pixels"
+                        output=f"Scrolled {direction} by {abs(scroll_amount_int)} pixels"
                     )
 
                 elif action == "switch_tab":
-                    if tab_id is None:
+                    if tab_id_int is None:
                         return ToolResult(
                             error="Tab ID is required for 'switch_tab' action"
                         )
-                    await context.switch_to_tab(tab_id)
-                    return ToolResult(output=f"Switched to tab {tab_id}")
+                    await context.switch_to_tab(tab_id_int)
+                    return ToolResult(output=f"Switched to tab {tab_id_int}")
 
                 elif action == "new_tab":
                     if not url:
                         return ToolResult(error="URL is required for 'new_tab' action")
-                    await context.create_new_tab(url)
-                    return ToolResult(output=f"Opened new tab with URL {url}")
+                    tab_id = await context.new_tab(url)
+                    return ToolResult(output=f"Opened new tab (ID: {tab_id}) with URL: {url}")
 
                 elif action == "close_tab":
                     await context.close_current_tab()
                     return ToolResult(output="Closed current tab")
 
                 elif action == "refresh":
-                    await context.refresh_page()
+                    await context.refresh()
                     return ToolResult(output="Refreshed current page")
 
                 else:
                     return ToolResult(error=f"Unknown action: {action}")
 
             except Exception as e:
-                return ToolResult(error=f"Browser action '{action}' failed: {str(e)}")
+                logging.error(f"BrowserUseTool error: {e}")
+                return ToolResult(error=f"Browser error: {str(e)}")
 
     async def get_current_state(self) -> ToolResult:
-        """Get the current browser state as a ToolResult."""
-        async with self.lock:
-            try:
-                context = await self._ensure_browser_initialized()
-                state = await context.get_state()
-                state_info = {
-                    "url": state.url,
-                    "title": state.title,
-                    "tabs": [tab.model_dump() for tab in state.tabs],
-                    "interactive_elements": state.element_tree.clickable_elements_to_string(),
-                }
-                return ToolResult(output=json.dumps(state_info))
-            except Exception as e:
-                return ToolResult(error=f"Failed to get browser state: {str(e)}")
+        """Get the current state of the browser."""
+        if self.context is None or self.dom_service is None:
+            return ToolResult(error="Browser not initialized")
 
-    async def cleanup(self):
-        """清理浏览器资源"""
-        if hasattr(self, "browser") and self.browser is not None:
+        try:
+            url = await self.context.get_url()
+            title = await self.dom_service.get_title()
+            
+            # Get tabs information
+            tabs = await self.context.get_tabs()
+            tabs_info = []
+            for i, tab in enumerate(tabs):
+                tab_url = await tab.get_url()
+                tab_title = await tab.get_title() or "No title"
+                tabs_info.append(f"[{i}] {tab_title}: {tab_url}")
+
+            current_tab_index = await self.context.get_current_tab_index()
+            
+            # Get basic page stats
+            elements_count = await self.dom_service.get_elements_count()
+            links_count = await self.dom_service.get_links_count()
+            
+            # Format output
+            output = [
+                f"Current URL: {url}",
+                f"Page Title: {title}",
+                f"Current Tab: {current_tab_index}",
+                f"Total Tabs: {len(tabs)}",
+                f"Elements on page: {elements_count}",
+                f"Links on page: {links_count}",
+                "\nAvailable Tabs:",
+            ]
+            output.extend(tabs_info)
+            
+            return ToolResult(output="\n".join(output))
+        except Exception as e:
+            logging.error(f"Error getting browser state: {e}")
+            return ToolResult(error=f"Error getting browser state: {str(e)}")
+
+    async def close(self):
+        """Close the browser and clean up resources."""
+        if self.browser:
             try:
-                if (
-                    hasattr(self, "context")
-                    and self.context
-                    and not self.context.is_closed()
-                ):
-                    await self.context.close()
-                if self.browser and not self.browser.is_closed():
-                    await self.browser.close()
+                await self.browser.close()
+            except Exception as e:
+                logging.error(f"Error closing browser: {e}")
+            finally:
                 self.browser = None
                 self.context = None
-                self.dom_service = None  # 修正变量名
-            except Exception as e:
-                logging.error(f"浏览器清理过程中出错: {str(e)}")
+                self.dom_service = None
+
+    async def cleanup(self):
+        """Clean up resources when the tool is no longer needed."""
+        await self.close()
 
     def __del__(self):
-        """在对象被销毁时尝试清理资源"""
+        """Destructor to ensure resources are cleaned up."""
         if hasattr(self, "browser") and self.browser is not None:
+            import asyncio
             try:
-                # 检查是否有事件循环正在运行
-                try:
-                    loop = asyncio.get_running_loop()
-                    if loop.is_running():
-                        # 如果有循环在运行，记录警告并跳过(避免运行时错误)
-                        logging.warning("事件循环正在运行，跳过浏览器清理。这可能会导致资源泄漏。")
-                        return
-                except RuntimeError:
-                    # 没有事件循环在运行，可以创建新的
-                    loop = asyncio.new_event_loop()
-                    loop.run_until_complete(self.cleanup())
-                    loop.close()
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.close())
+                else:
+                    # Create a new event loop if needed
+                    new_loop = asyncio.new_event_loop()
+                    new_loop.run_until_complete(self.close())
+                    new_loop.close()
             except Exception as e:
-                logging.error(f"浏览器资源清理失败: {str(e)}")
+                logging.error(f"Error in browser cleanup during destruction: {e}")
+                if hasattr(self, "browser"):
+                    self.browser = None
+                if hasattr(self, "context"):
+                    self.context = None
+                if hasattr(self, "dom_service"):
+                    self.dom_service = None

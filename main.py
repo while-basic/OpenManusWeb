@@ -27,7 +27,7 @@ async def run_cli():
             break
 
 
-async def run_web():
+def run_web():
     """启动Web应用"""
     # 使用子进程执行web_run.py
     import uvicorn
@@ -39,7 +39,7 @@ async def run_web():
 
     if not check_websocket_dependencies():
         logger.error("退出应用。请安装必要的依赖后重试。")
-        return
+        return 1
 
     logger.info("🚀 OpenManus Web 应用正在启动...")
     logger.info("访问 http://localhost:8000 开始使用")
@@ -49,6 +49,7 @@ async def run_web():
 
     # 在当前进程中启动Uvicorn服务器
     uvicorn.run("app.web.app:app", host="0.0.0.0", port=8000)
+    return 0
 
 
 def main():
@@ -62,7 +63,8 @@ def main():
         if args.web:
             # 启动Web模式
             logger.info("启动Web应用模式...")
-            asyncio.run(run_web())
+            # Directly call run_web without asyncio.run() since uvicorn has its own event loop
+            return run_web()
         else:
             # 启动CLI模式
             logger.info("启动命令行交互模式...")

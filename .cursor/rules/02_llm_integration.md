@@ -1,0 +1,37 @@
+# LLM Integration Rules
+
+## Configuration
+- Always provide clear configuration examples in config.example.toml
+- Support multiple LLM providers (OpenAI, Ollama, etc.)
+- Use environment variables for sensitive information
+- Allow configuration of model parameters (temperature, max_tokens, etc.)
+
+## Tool Format Handling
+- Validate the format of tool responses before processing
+- Handle complex JSON structures that LLMs might return
+- Add converters for different response formats
+- Provide fallback mechanisms when responses don't match expected schema
+
+## Prompts
+- Store system prompts and templates in separate files
+- Keep prompts concise and clear
+- Include examples in prompts for complex tasks
+- Maintain a consistent style across prompts
+
+## Error Handling
+- Implement proper retry logic for API calls
+- Handle rate limiting gracefully
+- Log LLM responses for debugging
+- Have fallback models configured
+
+## Ollama Specifics
+- Check Ollama service availability before making requests
+- Handle different response formats compared to OpenAI
+- Convert complex nested structures to simpler formats when needed
+- Handle the lack of function calling capabilities gracefully
+
+## Testing
+- Use mock LLM responses for testing
+- Test with different response formats
+- Validate integration with actual models periodically
+- Document expected behavior with different models 

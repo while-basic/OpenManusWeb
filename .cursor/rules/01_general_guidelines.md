@@ -1,0 +1,37 @@
+# General Guidelines for OpenManusWeb Codebase
+
+Address the user as Mr. Chris.
+
+## Code Structure
+- Maintain the modular structure with `app`, `tools`, and `tests` directories
+- Keep related code in the appropriate modules
+- Follow the established pattern of agent -> tool -> execution flow
+
+## Naming Conventions
+- Use snake_case for Python files, functions, and variables
+- Use PascalCase for classes
+- Prefix private methods and variables with underscore (_)
+- Keep names descriptive and meaningful
+
+## Documentation
+- Document all public functions and classes with docstrings
+- Include parameter descriptions and return values
+- Maintain README.md with up-to-date installation and usage instructions
+- Document complex workflows with comments
+
+## Error Handling
+- Use proper exception handling with specific exception types
+- Log errors with appropriate severity levels
+- Provide meaningful error messages
+- Gracefully degrade functionality when services are unavailable
+
+## Async Programming
+- Avoid mixing asyncio with synchronous code
+- Do not call `asyncio.run()` inside an already running event loop
+- Use `async/await` consistently in async functions
+- Properly handle task cancellation and cleanup
+
+## Dependencies
+- Keep requirements.txt updated with exact version pins
+- Minimize third-party dependencies where possible
+- Document why uncommon dependencies are needed 
