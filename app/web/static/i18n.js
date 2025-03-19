@@ -35,6 +35,7 @@ export const translations = {
         'processing_request': '正在处理您的请求...',
         'processing_stopped': '处理已停止',
         'file_name': '文件名',
+        'no_workspace_files': '没有工作区文件',
         
         // 输入框占位符
         'input_placeholder': '输入您的问题或指令...',
@@ -42,6 +43,7 @@ export const translations = {
         // 页脚
         'ui_made_by': 'Web界面制作:',
         'powered_by': 'Powered by OpenManus -',
+        'creator_name': '云栖AI',
         
         // 错误消息
         'api_error': 'API错误: {status}',
@@ -56,7 +58,17 @@ export const translations = {
         
         // 语言切换
         'language': '语言',
-        'switch_language': '切换语言'
+        'switch_language': '切换语言',
+        
+        // 终端功能
+        'terminal_command': '终端命令',
+        'terminal_input_placeholder': '输入命令...',
+        'run': '运行',
+        'interrupt': '中断',
+        'command_running': '命令执行中...',
+        'command_completed': '命令已完成',
+        'command_error': '命令执行错误: {message}',
+        'terminal_title': '终端'
     },
     
     // 英文翻译
@@ -86,6 +98,7 @@ export const translations = {
         'processing_request': 'Processing your request...',
         'processing_stopped': 'Processing stopped',
         'file_name': 'File Name',
+        'no_workspace_files': 'No workspace files',
         
         // 输入框占位符
         'input_placeholder': 'Enter your question or instruction...',
@@ -93,6 +106,7 @@ export const translations = {
         // 页脚
         'ui_made_by': 'UI Made by:',
         'powered_by': 'Powered by OpenManus -',
+        'creator_name': '云栖AI',
         
         // 错误消息
         'api_error': 'API Error: {status}',
@@ -107,12 +121,22 @@ export const translations = {
         
         // 语言切换
         'language': 'Language',
-        'switch_language': 'Switch Language'
+        'switch_language': 'Switch Language',
+        
+        // 终端功能
+        'terminal_command': 'Terminal Command',
+        'terminal_input_placeholder': 'Enter command...',
+        'run': 'Run',
+        'interrupt': 'Interrupt',
+        'command_running': 'Command running...',
+        'command_completed': 'Command completed',
+        'command_error': 'Command execution error: {message}',
+        'terminal_title': 'Terminal'
     }
 };
 
 // 当前语言
-let currentLanguage = 'zh-CN';
+let currentLanguage = 'en-US';
 
 // 获取浏览器语言
 export function getBrowserLanguage() {
@@ -144,8 +168,8 @@ export function initLanguage() {
     if (savedLang && translations[savedLang]) {
         currentLanguage = savedLang;
     } else {
-        // 如果没有保存的语言设置，使用浏览器语言
-        currentLanguage = getBrowserLanguage();
+        // 如果没有保存的语言设置，使用英文作为默认语言
+        currentLanguage = 'en-US';
     }
     return currentLanguage;
 }
@@ -173,7 +197,7 @@ export function updatePageTexts() {
         
         // 如果元素是输入框或文本区域，更新placeholder
         if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-            if (element.getAttribute('placeholder')) {
+            if (element.hasAttribute('placeholder')) {
                 element.setAttribute('placeholder', t(key));
             }
         } else {

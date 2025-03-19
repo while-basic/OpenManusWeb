@@ -8,7 +8,7 @@ from app.logger import logger
 
 
 async def run_cli():
-    """运行命令行交互模式"""
+    """Run command line interactive mode"""
     agent = Manus()
     while True:
         try:
@@ -28,51 +28,51 @@ async def run_cli():
 
 
 def run_web():
-    """启动Web应用"""
-    # 使用子进程执行web_run.py
+    """Start Web application"""
+    # Use subprocess to execute web_run.py
     import uvicorn
 
-    # 确保目录结构存在
+    # Ensure directory structure exists
     from web_run import check_websocket_dependencies, ensure_directories
 
     ensure_directories()
 
     if not check_websocket_dependencies():
-        logger.error("退出应用。请安装必要的依赖后重试。")
+        logger.error("Exiting application. Please install the necessary dependencies and try again.")
         return 1
 
-    logger.info("🚀 OpenManus Web 应用正在启动...")
-    logger.info("访问 http://localhost:8000 开始使用")
+    logger.info("🚀 OpenManus Web application is starting...")
+    logger.info("Visit http://localhost:8000 to get started")
 
-    # 设置环境变量以启用自动打开浏览器
+    # Set environment variable to enable auto-open browser
     os.environ["AUTO_OPEN_BROWSER"] = "1"
 
-    # 在当前进程中启动Uvicorn服务器
+    # Start Uvicorn server in the current process
     uvicorn.run("app.web.app:app", host="0.0.0.0", port=8000)
     return 0
 
 
 def main():
-    """主程序入口，解析命令行参数决定运行模式"""
-    parser = argparse.ArgumentParser(description="OpenManus - AI助手")
-    parser.add_argument("--web", action="store_true", help="以Web应用模式运行（默认为命令行模式）")
+    """Main program entry, parse command line arguments to decide running mode"""
+    parser = argparse.ArgumentParser(description="OpenManus - AI Assistant")
+    parser.add_argument("--web", action="store_true", help="Run in Web application mode (default is command line mode)")
 
     args = parser.parse_args()
 
     try:
         if args.web:
-            # 启动Web模式
-            logger.info("启动Web应用模式...")
+            # Start Web mode
+            logger.info("Starting Web application mode...")
             # Directly call run_web without asyncio.run() since uvicorn has its own event loop
             return run_web()
         else:
-            # 启动CLI模式
-            logger.info("启动命令行交互模式...")
+            # Start CLI mode
+            logger.info("Starting command line interactive mode...")
             asyncio.run(run_cli())
     except KeyboardInterrupt:
-        logger.warning("程序已退出")
+        logger.warning("Program exited")
     except Exception as e:
-        logger.error(f"程序异常退出: {str(e)}")
+        logger.error(f"Program exited with exception: {str(e)}")
         return 1
 
     return 0

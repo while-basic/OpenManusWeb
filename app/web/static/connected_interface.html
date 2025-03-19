@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-US">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenManus Web</title>
+    <title>Sith Web</title>
     <style>
         :root {
             --primary-color: #4a6fa5;
@@ -527,6 +527,87 @@
             background-color: #f8f8f8;
             border-radius: 4px;
         }
+
+        /* Terminal Styles */
+        .terminal-section {
+            margin-top: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background-color: #2d2d2d;
+            border-bottom: 1px solid var(--border-color);
+            color: #f0f0f0;
+        }
+
+        .terminal-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: #f0f0f0;
+        }
+
+        .terminal-output {
+            background-color: #1e1e1e;
+            color: #f0f0f0;
+            font-family: monospace;
+            padding: 15px;
+            height: 250px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        .terminal-input-area {
+            display: flex;
+            align-items: center;
+            background-color: #2d2d2d;
+            padding: 10px 15px;
+            border-top: 1px solid #444;
+        }
+
+        .terminal-prompt {
+            color: #7ece42;
+            font-family: monospace;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        #terminal-input {
+            flex: 1;
+            background-color: #3d3d3d;
+            color: #f0f0f0;
+            border: none;
+            padding: 8px 12px;
+            font-family: monospace;
+            border-radius: 4px;
+        }
+
+        #terminal-input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(80, 160, 255, 0.5);
+        }
+
+        .terminal-output .command {
+            color: #7ece42;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .terminal-output .result {
+            margin-bottom: 15px;
+        }
+
+        .terminal-output .error {
+            color: #ff6b6b;
+        }
     </style>
 </head>
 <body>
@@ -537,7 +618,7 @@
             <div class="language-selector">
                 <select id="language-selector" aria-label="Language selector">
                     <option value="zh-CN">中文</option>
-                    <option value="en-US">English</option>
+                    <option value="en-US" selected>English</option>
                 </select>
             </div>
         </header>
@@ -606,12 +687,27 @@
                         </div>
                         <pre id="file-content" class="file-content"></pre>
                     </div>
+
+                    <!-- Terminal Command Interface -->
+                    <div id="terminal-section" class="terminal-section">
+                        <div class="terminal-header">
+                            <h3 data-i18n="terminal_command">Terminal Command</h3>
+                            <button id="clear-terminal" class="btn-clear" data-i18n="clear">Clear</button>
+                        </div>
+                        <div id="terminal-output" class="terminal-output"></div>
+                        <div class="terminal-input-area">
+                            <div class="terminal-prompt">$</div>
+                            <input type="text" id="terminal-input" placeholder="Enter command..." data-i18n="terminal_input_placeholder" />
+                            <button id="run-command" class="btn-send" data-i18n="run">Run</button>
+                            <button id="interrupt-command" class="btn-stop" data-i18n="interrupt">Interrupt</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
 
         <footer>
-            <p><span data-i18n="ui_made_by">Web界面制作:</span> <a href="https://space.bilibili.com/267577" target="_blank">云栖AI</a></p>
+            <p><span data-i18n="ui_made_by">UI Made by:</span> <a href="https://space.bilibili.com/267577" target="_blank"><span data-i18n="creator_name">云栖AI</span></a></p>
             <p><span data-i18n="powered_by">Powered by OpenManus -</span> <a href="https://github.com/mannaandpoem/OpenManus" target="_blank">GitHub</a></p>
         </footer>
     </div>

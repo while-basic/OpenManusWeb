@@ -1,74 +1,80 @@
-// connected_interface.js - 主要JavaScript文件，负责初始化和协调其他模块
+// connected_interface.js - Main JavaScript file responsible for initialization and coordination of other modules
 
-// 导入各个管理器类
+// Import manager classes
 import { WebSocketManager } from '/static/connected_websocketManager.js';
 import { ChatManager } from '/static/connected_chatManager.js';
 import { ThinkingManager } from '/static/connected_thinkingManager.js';
 import { WorkspaceManager } from '/static/connected_workspaceManager.js';
 import { FileViewerManager } from '/static/connected_fileViewerManager.js';
+import { TerminalManager } from '/static/connected_terminalManager.js';
 import { initLanguage, setLanguage, updatePageTexts, t } from '/static/i18n.js';
 
-// 主应用类
+// Main application class
 class App {
     constructor() {
         this.sessionId = null;
         this.isProcessing = false;
 
-        // 初始化各个管理器
+        // Initialize managers
         this.websocketManager = new WebSocketManager(this.handleWebSocketMessage.bind(this));
         this.chatManager = new ChatManager(this.handleSendMessage.bind(this));
         this.thinkingManager = new ThinkingManager();
         this.workspaceManager = new WorkspaceManager(this.handleFileClick.bind(this));
         this.fileViewerManager = new FileViewerManager();
+        this.terminalManager = new TerminalManager();
 
-        // 绑定UI事件
+        // Bind UI events
         this.bindEvents();
     }
 
-    // 初始化应用
+    // Initialize application
     init() {
-        console.log('OpenManus Web应用初始化...');
+        console.log('OpenManus Web application initializing...');
 
-        // 初始化语言设置
+        // Initialize language settings
         const currentLang = initLanguage();
         document.getElementById('language-selector').value = currentLang;
         updatePageTexts();
 
-        // 初始化各个管理器
+        // Initialize managers
         this.chatManager.init();
         this.thinkingManager.init();
         this.workspaceManager.init();
         this.fileViewerManager.init();
+        this.terminalManager.init();
+        
+        // Apply translations to dynamic elements
+        this.updateDynamicTexts();
 
-        // 加载工作区文件
+        // Load workspace files
         this.loadWorkspaceFiles();
     }
 
-    // 绑定UI事件
+    // Bind UI events
     bindEvents() {
-        // 停止按钮
+        // Stop button
         document.getElementById('stop-btn').addEventListener('click', () => {
             if (this.sessionId && this.isProcessing) {
                 this.stopProcessing();
             }
         });
 
-        // 清除按钮
+        // Clear button
         document.getElementById('clear-btn').addEventListener('click', () => {
             this.chatManager.clearMessages();
         });
 
-        // 清除思考记录按钮
+        // Clear thinking records button
         document.getElementById('clear-thinking').addEventListener('click', () => {
             this.thinkingManager.clearThinking();
         });
 
-        // 刷新文件按钮
+        // Refresh files button
         document.getElementById('refresh-files').addEventListener('click', () => {
             this.loadWorkspaceFiles();
         });
 
-        // 语言选择器
+        // Language selector
         document.getElementById('language-selector').addEventListener('change', (event) => {
             const selectedLang = event.target.value;
             setLanguage(selectedLang);
@@ -77,24 +83,24 @@ class App {
         });
     }
 
-    // 更新动态生成的文本
+    // Update dynamically generated text
     updateDynamicTexts() {
-        // 更新状态指示器
+        // Update status indicator
         const statusIndicator = document.getElementById('status-indicator');
-        if (statusIndicator.textContent.includes('正在处理')) {
+        if (statusIndicator.textContent.includes('Processing')) {
             statusIndicator.textContent = t('processing_request');
-        } else if (statusIndicator.textContent.includes('处理已停止')) {
+        } else if (statusIndicator.textContent.includes('stopped')) {
             statusIndicator.textContent = t('processing_stopped');
         }
 
-        // 更新记录计数
+        // Update record count
         const recordCount = document.getElementById('record-count');
         const count = parseInt(recordCount.textContent);
         if (!isNaN(count)) {
             recordCount.textContent = t('records_count', { count });
         }
 
-        // 更新刷新倒计时
+        // Update refresh countdown
         const refreshCountdown = document.getElementById('refresh-countdown');
         const seconds = refreshCountdown.textContent.match(/\d+/);
         if (seconds) {
@@ -102,10 +108,10 @@ class App {
         }
     }
 
-    // 处理发送消息
+    // Process sending message
     async handleSendMessage(message) {
         if (this.isProcessing) {
-            console.log('正在处理中，请等待...');
+            console.log('Processing, please wait...');
             return;
         }
 
@@ -115,7 +121,7 @@ class App {
         document.getElementById('status-indicator').textContent = t('processing_request');
 
         try {
-            // 发送API请求创建新会话
+            // Send API request to create new session
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
@@ -131,13 +137,13 @@ class App {
             const data = await response.json();
             this.sessionId = data.session_id;
 
-            // 添加用户消息到聊天
+            // Add user message to chat
             this.chatManager.addUserMessage(message);
 
-            // 连接WebSocket
+            // Connect WebSocket
             this.websocketManager.connect(this.sessionId);
 
-            // 重置思考记录
+            // Reset thinking records
             this.thinkingManager.clearThinking();
 
         } catch (error) {
@@ -150,62 +156,24 @@ class App {
         }
     }
 
-    // 处理WebSocket消息
+    // Process WebSocket message
     handleWebSocketMessage(data) {
-        // 处理状态更新
-        if (data.status) {
-            if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
-                this.isProcessing = false;
-                document.getElementById('send-btn').disabled = false;
-                document.getElementById('stop-btn').disabled = true;
-                document.getElementById('status-indicator').textContent = '';
-
-                // 如果有结果，显示结果
-                if (data.result) {
-                    this.chatManager.addAIMessage(data.result);
-                }
-            }
-        }
-
-        // 处理思考步骤
-        if (data.thinking_steps && data.thinking_steps.length > 0) {
-            this.thinkingManager.addThinkingSteps(data.thinking_steps);
-        }
-
-        // 处理终端输出
-        if (data.terminal_output && data.terminal_output.length > 0) {
-            console.log('收到终端输出:', data.terminal_output);
-        }
-
-        // 处理系统日志 - 将系统日志转换为思考步骤并显示
-        if (data.system_logs && data.system_logs.length > 0) {
-            console.log('收到系统日志:', data.system_logs);
-
-            // 将系统日志转换为思考步骤格式并添加到思考时间线
-            const logSteps = data.system_logs.map(log => {
-                return {
-                    message: log,
-                    type: "system_log",
-                    details: null,
-                    timestamp: Date.now() / 1000
-                };
-            });
-
-            this.thinkingManager.addThinkingSteps(logSteps);
-        }
-
-        // 处理聊天日志
-        if (data.chat_logs && data.chat_logs.length > 0) {
-            console.log('收到聊天日志:', data.chat_logs);
-        }
-
-        // 如果处理完成，刷新工作区文件
-        if (data.status === 'completed') {
-            setTimeout(() => this.loadWorkspaceFiles(), 1000);
+        if (data.type === 'thinking_step') {
+            this.thinkingManager.addThinkingStep(data);
+        } else if (data.type === 'ai_message') {
+            this.chatManager.addAIMessage(data.content);
+        } else if (data.type === 'file_generated') {
+            // Update file list
+            this.workspaceManager.addFile(data.file);
+        } else if (data.type === 'terminal_update') {
+            // Handle terminal update
+            this.terminalManager.handleTerminalUpdate(data);
+        } else if (data.type === 'completed') {
+            this.processingComplete();
         }
     }
 
-    // 停止处理
+    // Stop processing
     async stopProcessing() {
         if (!this.sessionId) return;
 
@@ -218,7 +186,7 @@ class App {
                 throw new Error(t('api_error', { status: response.status }));
             }
 
-            console.log('处理已停止');
+            console.log('Processing stopped');
             this.chatManager.addSystemMessage(t('processing_stopped'));
             document.getElementById('status-indicator').textContent = t('processing_stopped');
             document.getElementById('send-btn').disabled = false;
@@ -231,7 +199,7 @@ class App {
         }
     }
 
-    // 加载工作区文件
+    // Load workspace files
     async loadWorkspaceFiles() {
         try {
             const response = await fetch('/api/files');
@@ -247,7 +215,7 @@ class App {
         }
     }
 
-    // 处理文件点击
+    // Handle file click
     async handleFileClick(filePath) {
         try {
             const response = await fetch(`/api/files/${encodeURIComponent(filePath)}`);
@@ -265,11 +233,11 @@ class App {
     }
 }
 
-// 当DOM加载完成后初始化应用
+// Initialize application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     const app = new App();
     app.init();
 
-    // 将app实例暴露到全局，方便调试
+    // Expose app instance to global for debugging
     window.app = app;
 });

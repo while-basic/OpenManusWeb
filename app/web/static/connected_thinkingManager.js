@@ -1,193 +1,205 @@
-// connected_thinkingManager.js - 处理AI思考过程显示
+// connected_thinkingManager.js - Manages the display of AI thinking process steps
+
+import { t } from '/static/i18n.js';
 
 export class ThinkingManager {
     constructor() {
-        this.thinkingContainer = document.getElementById('thinking-timeline');
-        this.recordCountElement = document.getElementById('record-count');
-        this.autoScrollCheckbox = document.getElementById('auto-scroll');
         this.thinkingSteps = [];
+        this.thinkingStepsContainer = null;
+        this.clearButton = null;
+        this.recordCount = null;
+        this.refreshCountdown = null;
+        this.autoRefresh = true;
+        this.refreshIntervalId = null;
+        this.refreshCountdownValue = 30;
     }
 
-    // 初始化思考管理器
     init() {
-        // 初始化记录计数
-        this.updateRecordCount();
-    }
+        // Get DOM elements
+        this.thinkingStepsContainer = document.getElementById('thinking-steps');
+        this.clearButton = document.getElementById('clear-thinking');
+        this.recordCount = document.getElementById('record-count');
+        this.refreshCountdown = document.getElementById('refresh-countdown');
 
-    // 添加思考步骤
-    addThinkingStep(step) {
-        this.thinkingSteps.push(step);
+        // Initialize thinking steps
+        this.thinkingSteps = [];
+        this.renderThinkingSteps();
 
-        // 创建并添加步骤元素
-        const stepElement = this.createStepElement(step);
-        this.thinkingContainer.appendChild(stepElement);
-
-        // 更新记录计数
-        this.updateRecordCount();
-
-        // 如果启用了自动滚动，滚动到底部
-        if (this.autoScrollCheckbox.checked) {
-            this.scrollToBottom();
-        }
-
-        // 淡入效果
-        setTimeout(() => {
-            stepElement.style.opacity = 1;
-        }, 10);
-    }
-
-    // 添加多个思考步骤
-    addThinkingSteps(steps) {
-        if (!Array.isArray(steps)) return;
-
-        steps.forEach(step => {
-            this.addThinkingStep(step);
-        });
-    }
-
-    // 创建步骤元素
-    createStepElement(step) {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'timeline-item';
-        itemDiv.style.opacity = 0; // 初始透明，用于淡入效果
-
-        // 如果是完成步骤，添加completed类
-        if (step.type === 'conclusion' || step.type === 'completed') {
-            itemDiv.classList.add('completed');
-        }
-
-        // 创建标记点
-        const markerDiv = document.createElement('div');
-        markerDiv.className = 'timeline-marker';
-        itemDiv.appendChild(markerDiv);
-
-        // 创建内容容器
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'timeline-content';
-
-        // 创建标题
-        const headerDiv = document.createElement('div');
-        headerDiv.className = 'timeline-header';
-        headerDiv.textContent = this.getStepHeader(step);
-        contentDiv.appendChild(headerDiv);
-
-        // 如果是通信类型的步骤
-        if (step.type === 'communication') {
-            const headerDiv = document.createElement('div');
-            headerDiv.className = 'communication-header';
-            headerDiv.innerHTML = `<span class="communication-direction">${step.message}</span> <span class="toggle-icon">▶</span>`;
-            headerDiv.onclick = function() {
-                const detailsElement = this.nextElementSibling;
-                const toggleIcon = this.querySelector('.toggle-icon');
-
-                if (detailsElement.style.display === 'none' || !detailsElement.style.display) {
-                    detailsElement.style.display = 'block';
-                    toggleIcon.textContent = '▼';
-                } else {
-                    detailsElement.style.display = 'none';
-                    toggleIcon.textContent = '▶';
-                }
-            };
-
-            const detailsElement = document.createElement('div');
-            detailsElement.className = 'timeline-details';
-            detailsElement.style.display = 'none';
-
-            if (step.details) {
-                detailsElement.textContent = step.details;
-            } else {
-                detailsElement.textContent = '(无详细内容)';
-            }
-
-            contentDiv.appendChild(headerDiv);
-            contentDiv.appendChild(detailsElement);
-        }
-        // 如果有详细内容，添加详情按钮和内容
-        else if (step.details) {
-            // 创建详情按钮
-            const detailsButton = document.createElement('button');
-            detailsButton.className = 'btn-details';
-            detailsButton.textContent = '显示详情 ▼';
-            contentDiv.appendChild(detailsButton);
-
-            // 创建详情内容（初始隐藏）
-            const detailsDiv = document.createElement('div');
-            detailsDiv.className = 'timeline-details';
-            detailsDiv.style.display = 'none';
-            detailsDiv.textContent = step.details;
-            contentDiv.appendChild(detailsDiv);
-
-            // 绑定详情按钮点击事件
-            detailsButton.addEventListener('click', () => {
-                if (detailsDiv.style.display === 'none') {
-                    detailsDiv.style.display = 'block';
-                    detailsButton.textContent = '隐藏详情 ▲';
-                } else {
-                    detailsDiv.style.display = 'none';
-                    detailsButton.textContent = '显示详情 ▼';
-                }
+        // Bind events
+        if (this.clearButton) {
+            this.clearButton.addEventListener('click', () => {
+                this.clearThinking();
             });
         }
 
-        // 如果是文件生成步骤，添加文件列表
-        if (step.files && step.files.length > 0) {
-            const fileListDiv = document.createElement('div');
-            fileListDiv.className = 'file-list';
-            fileListDiv.textContent = step.files.join(', ');
-            contentDiv.appendChild(fileListDiv);
-        }
-
-        itemDiv.appendChild(contentDiv);
-        return itemDiv;
+        // Start auto-refresh
+        this.startAutoRefresh();
     }
 
-    // 获取步骤标题
-    getStepHeader(step) {
-        if (step.message) {
-            return step.message;
-        }
-
-        switch (step.type) {
-            case 'thinking':
-                return step.content || '思考过程';
-            case 'tool':
-                return `使用工具: ${step.tool || ''}`;
-            case 'file':
-                return `在工作区 ${step.workspace || ''} 中生成了 ${step.files ? step.files.length : 0} 个文件:`;
-            case 'conclusion':
-            case 'completed':
-                return `任务处理完成! 已在工作区 ${step.workspace || ''} 中生成结果。`;
-            case 'error':
-                return `发生错误: ${step.error || ''}`;
-            case 'system':
-                return step.content || '系统消息';
-            case 'system_log':
-                return step.message || '系统日志';
-            case 'progress':
-                return `执行步骤 ${step.current}/${step.total}`;
-            case 'communication':
-                return step.message || '通信';
-            default:
-                return step.content ? step.content.substring(0, 50) + (step.content.length > 50 ? '...' : '') : '思考步骤';
-        }
+    // Add a new thinking step
+    addThinkingStep(step) {
+        // Add step to our tracking array
+        this.thinkingSteps.push(step);
+        
+        // Render the updated thinking steps
+        this.renderThinkingSteps();
     }
 
-    // 更新记录计数
-    updateRecordCount() {
-        if (this.recordCountElement) {
-            this.recordCountElement.textContent = `${this.thinkingSteps.length} 条记录`;
+    // Render all thinking steps to the DOM
+    renderThinkingSteps() {
+        if (!this.thinkingStepsContainer) return;
+
+        // Clear current content
+        this.thinkingStepsContainer.innerHTML = '';
+
+        if (this.thinkingSteps.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'empty-message';
+            emptyMessage.textContent = t('no_thinking_steps');
+            this.thinkingStepsContainer.appendChild(emptyMessage);
+            
+            // Update record count if element exists
+            if (this.recordCount) {
+                this.recordCount.textContent = '0';
+            }
+            return;
         }
+
+        // Add each thinking step
+        this.thinkingSteps.forEach((step, index) => {
+            const stepElement = this.createThinkingStepElement(step, index);
+            this.thinkingStepsContainer.appendChild(stepElement);
+        });
+
+        // Update record count if element exists
+        if (this.recordCount) {
+            this.recordCount.textContent = this.thinkingSteps.length.toString();
+        }
+
+        // Scroll to bottom
+        this.thinkingStepsContainer.scrollTop = this.thinkingStepsContainer.scrollHeight;
     }
 
-    // 清除所有思考记录
+    // Create a DOM element for a thinking step
+    createThinkingStepElement(step, index) {
+        const stepElement = document.createElement('div');
+        stepElement.className = 'thinking-step';
+        
+        // Create header with step number and timestamp
+        const header = document.createElement('div');
+        header.className = 'thinking-step-header';
+        
+        const stepNumber = document.createElement('div');
+        stepNumber.className = 'thinking-step-number';
+        stepNumber.textContent = `${t('step')} ${index + 1}`;
+        
+        const timestamp = document.createElement('div');
+        timestamp.className = 'thinking-step-timestamp';
+        const time = new Date(step.timestamp || Date.now()).toLocaleTimeString();
+        timestamp.textContent = time;
+        
+        header.appendChild(stepNumber);
+        header.appendChild(timestamp);
+        
+        // Create content for the step
+        const content = document.createElement('div');
+        content.className = 'thinking-step-content';
+        
+        // Format content based on step type
+        if (step.type === 'thinking_step') {
+            if (step.thought_number && step.total_thoughts) {
+                content.innerHTML = `<strong>${t('thought')} ${step.thought_number}/${step.total_thoughts}:</strong> ${this.formatThinkingContent(step.content)}`;
+            } else {
+                content.innerHTML = this.formatThinkingContent(step.content);
+            }
+        } else {
+            content.textContent = step.content || '';
+        }
+        
+        // Assemble the step element
+        stepElement.appendChild(header);
+        stepElement.appendChild(content);
+        
+        return stepElement;
+    }
+
+    // Format thinking content with proper formatting
+    formatThinkingContent(content) {
+        if (!content) return '';
+        
+        // Convert links to clickable elements
+        let formattedContent = content.replace(
+            /(https?:\/\/[^\s]+)/g, 
+            '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+        );
+        
+        // Convert code blocks with syntax highlighting if available
+        formattedContent = formattedContent.replace(
+            /```([a-z]*)\n([\s\S]*?)\n```/g,
+            '<pre class="code-block"><code class="language-$1">$2</code></pre>'
+        );
+        
+        // Convert inline code
+        formattedContent = formattedContent.replace(
+            /`([^`]+)`/g,
+            '<code>$1</code>'
+        );
+        
+        return formattedContent;
+    }
+
+    // Clear all thinking steps
     clearThinking() {
         this.thinkingSteps = [];
-        this.thinkingContainer.innerHTML = '';
-        this.updateRecordCount();
+        this.renderThinkingSteps();
     }
 
-    // 滚动到底部
-    scrollToBottom() {
-        this.thinkingContainer.scrollTop = this.thinkingContainer.scrollHeight;
+    // Start auto-refresh countdown
+    startAutoRefresh() {
+        if (this.refreshIntervalId) {
+            clearInterval(this.refreshIntervalId);
+        }
+
+        this.refreshCountdownValue = 30;
+        
+        // Update countdown text if element exists
+        if (this.refreshCountdown) {
+            this.refreshCountdown.textContent = t('refresh_countdown', { seconds: this.refreshCountdownValue });
+        }
+        
+        // Set up interval
+        this.refreshIntervalId = setInterval(() => {
+            this.refreshCountdownValue--;
+            
+            // Update countdown text
+            if (this.refreshCountdown) {
+                this.refreshCountdown.textContent = t('refresh_countdown', { seconds: this.refreshCountdownValue });
+            }
+            
+            // When countdown reaches zero, refresh and reset
+            if (this.refreshCountdownValue <= 0 && this.autoRefresh) {
+                this.fetchLatestThinking();
+                this.refreshCountdownValue = 30;
+            }
+        }, 1000);
+    }
+
+    // Fetch latest thinking steps from server
+    async fetchLatestThinking() {
+        try {
+            const response = await fetch('/api/thinking');
+            if (!response.ok) {
+                throw new Error(t('api_error', { status: response.status }));
+            }
+
+            const data = await response.json();
+            
+            // Update thinking steps
+            this.thinkingSteps = data.thinking_steps || [];
+            this.renderThinkingSteps();
+            
+        } catch (error) {
+            console.error(t('fetch_thinking_error', { message: error.message }), error);
+        }
     }
 }

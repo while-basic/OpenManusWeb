@@ -27,6 +27,7 @@ from app.flow.flow_factory import FlowFactory
 from app.web.log_handler import capture_session_logs, get_logs
 from app.web.log_parser import get_all_logs_info, get_latest_log_info, parse_log_file
 from app.web.thinking_tracker import ThinkingTracker
+from app.web.terminal_api import terminal_router
 
 
 # 控制是否自动打开浏览器 (读取环境变量，默认为True)
@@ -34,6 +35,9 @@ AUTO_OPEN_BROWSER = os.environ.get("AUTO_OPEN_BROWSER", "1") == "1"
 last_opened = False  # 跟踪浏览器是否已打开
 
 app = FastAPI(title="OpenManus Web")
+
+# 注册终端API蓝图
+app.include_router(terminal_router)
 
 # 获取当前文件所在目录
 current_dir = Path(__file__).parent
@@ -47,6 +51,9 @@ active_sessions: Dict[str, dict] = {}
 
 # 存储任务取消事件
 cancel_events: Dict[str, asyncio.Event] = {}
+
+# 存储WebSocket连接
+websocket_connections: Dict[str, list] = {}
 
 # 创建工作区根目录
 WORKSPACE_ROOT = Path(__file__).parent.parent.parent / "workspace"
@@ -171,171 +178,54 @@ async def stop_processing(session_id: str):
 
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    await websocket.accept()
+    
+    # 将websocket添加到active_connections
+    if session_id not in websocket_connections:
+        websocket_connections[session_id] = []
+    websocket_connections[session_id].append(websocket)
+    
     try:
-        await websocket.accept()
-
-        if session_id not in active_sessions:
-            await websocket.send_text(json.dumps({"error": "Session not found"}))
-            await websocket.close()
-            return
-
-        session = active_sessions[session_id]
-
-        # 注册 WebSocket 发送回调函数
+        # 定义一个辅助函数来发送WebSocket消息
         async def ws_send(message: str):
-            try:
-                await websocket.send_text(message)
-            except Exception as e:
-                print(f"WebSocket 发送消息失败: {str(e)}")
-
-        ThinkingTracker.register_ws_send_callback(session_id, ws_send)
-
-        # 初始状态通知中添加日志信息
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "status": session["status"],
-                    "log": session["log"],
-                    "thinking_steps": ThinkingTracker.get_thinking_steps(session_id),
-                    "logs": ThinkingTracker.get_logs(session_id),  # 添加日志信息
-                }
-            )
-        )
-
-        # 获取工作区名称(job_id) - 优先从环境变量获取
-        job_id = None
-        # 首先检查当前会话的工作空间关联
-        if "workspace" in session:
-            job_id = session["workspace"]
-
-        # 如果当前没有日志监控器，则创建一个
-        if session_id not in active_log_monitors and job_id:
-            log_path = LOGS_DIR / f"{job_id}.log"
-            if log_path.exists():
-                log_monitor = LogFileMonitor(job_id)
-                log_monitor.start_monitoring()
-                active_log_monitors[session_id] = log_monitor
-
-        # 跟踪日志更新
-        last_log_entries = []
-        if job_id and session_id in active_log_monitors:
-            last_log_entries = active_log_monitors[session_id].get_log_entries()
-
-        # 等待结果更新
-        last_log_count = 0
-        last_thinking_step_count = 0
-        last_tracker_log_count = 0  # 添加ThinkingTracker日志计数
-
-        while session["status"] == "processing":
-            await asyncio.sleep(0.2)  # 降低检查间隔提高实时性
-
-            # 检查系统日志更新 (新增)
-            if job_id and session_id in active_log_monitors:
-                current_log_entries = active_log_monitors[session_id].get_log_entries()
-                if len(current_log_entries) > len(last_log_entries):
-                    new_logs = current_log_entries[len(last_log_entries) :]
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "status": session["status"],
-                                "system_logs": new_logs,
-                                # 添加一个chat_logs字段，将系统日志作为聊天消息发送
-                                "chat_logs": new_logs,
-                            }
-                        )
-                    )
-                    last_log_entries = current_log_entries
-
-            # 检查日志更新
-            current_log_count = len(session["log"])
-            if current_log_count > last_log_count:
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "status": session["status"],
-                            "log": session["log"][last_log_count:],
-                        }
-                    )
+            await websocket.send_text(message)
+            
+        # 给app添加广播终端更新的方法，可供terminal_api使用
+        app.websocket_manager = type('WebSocketManager', (), {
+            'broadcast_terminal_update': 
+                lambda cmd_id, data: asyncio.create_task(
+                    broadcast_terminal_update(session_id, cmd_id, data)
                 )
-                last_log_count = current_log_count
-
-            # 检查思考步骤更新
-            thinking_steps = ThinkingTracker.get_thinking_steps(session_id)
-            current_thinking_step_count = len(thinking_steps)
-            if current_thinking_step_count > last_thinking_step_count:
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "status": session["status"],
-                            "thinking_steps": thinking_steps[last_thinking_step_count:],
-                        }
-                    )
-                )
-                last_thinking_step_count = current_thinking_step_count
-
-            # 检查ThinkingTracker日志更新
-            tracker_logs = ThinkingTracker.get_logs(session_id)
-            current_tracker_log_count = len(tracker_logs)
-            if current_tracker_log_count > last_tracker_log_count:
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "status": session["status"],
-                            "logs": tracker_logs[last_tracker_log_count:],
-                        }
-                    )
-                )
-                last_tracker_log_count = current_tracker_log_count
-
-            # 检查结果更新
-            if session["result"]:
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "status": session["status"],
-                            "result": session["result"],
-                            "log": session["log"][last_log_count:],
-                            "thinking_steps": ThinkingTracker.get_thinking_steps(
-                                session_id, last_thinking_step_count
-                            ),
-                            "system_logs": last_log_entries,  # 添加系统日志
-                            "logs": ThinkingTracker.get_logs(
-                                session_id, last_tracker_log_count
-                            ),  # 添加ThinkingTracker日志
-                        }
-                    )
-                )
-                break  # 结果已发送，退出循环，避免重复发送
-
-        # 仅在循环没有因result而break时才发送最终结果
-        if not session["result"]:
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "status": session["status"],
-                        "result": session["result"],
-                        "log": session["log"][last_log_count:],
-                        "thinking_steps": ThinkingTracker.get_thinking_steps(
-                            session_id, last_thinking_step_count
-                        ),
-                        "system_logs": last_log_entries,  # 添加系统日志
-                        "logs": ThinkingTracker.get_logs(
-                            session_id, last_tracker_log_count
-                        ),  # 添加ThinkingTracker日志
-                    }
-                )
-            )
-
-        # 取消注册 WebSocket 发送回调函数
-        ThinkingTracker.unregister_ws_send_callback(session_id)
-        await websocket.close()
+        })
+            
+        # 在这里等待客户端消息，直到连接关闭
+        while True:
+            data = await websocket.receive_text()
+            print(f"收到消息: {data}")
+            
     except WebSocketDisconnect:
-        # 客户端断开连接，正常操作
-        ThinkingTracker.unregister_ws_send_callback(session_id)
-    except Exception as e:
-        # 其他异常，记录日志但不中断应用
-        print(f"WebSocket错误: {str(e)}")
-        ThinkingTracker.unregister_ws_send_callback(session_id)
+        # 从active_connections中移除websocket
+        if session_id in websocket_connections:
+            websocket_connections[session_id].remove(websocket)
+            if not websocket_connections[session_id]:
+                del websocket_connections[session_id]
+                
+# 广播终端更新给所有连接的客户端
+async def broadcast_terminal_update(session_id, command_id, data):
+    if session_id in websocket_connections:
+        message = {
+            'type': 'terminal_update',
+            'command_id': command_id,
+            'output': data.get('output', ''),
+            'error': data.get('error', ''),
+            'status': data.get('status', '')
+        }
+        
+        for client in websocket_connections[session_id]:
+            try:
+                await client.send_text(json.dumps(message))
+            except Exception as e:
+                print(f"发送终端更新错误: {e}")
 
 
 # 在适当位置添加LLM通信钩子

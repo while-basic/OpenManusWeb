@@ -1,4 +1,6 @@
-// connected_workspaceManager.js - 处理工作区文件显示
+// connected_workspaceManager.js - Workspace files display manager
+
+import { t } from '/static/i18n.js';
 
 export class WorkspaceManager {
     constructor(fileClickCallback) {
@@ -10,13 +12,13 @@ export class WorkspaceManager {
         this.countdownValue = 5;
     }
 
-    // 初始化工作区管理器
+    // Initialize workspace manager
     init() {
-        // 设置自动刷新计时器
+        // Set auto refresh timer
         this.startRefreshTimer();
     }
 
-    // 更新工作区列表
+    // Update workspace list
     updateWorkspaces(workspaces) {
         if (!Array.isArray(workspaces)) return;
 
@@ -24,27 +26,27 @@ export class WorkspaceManager {
         this.renderWorkspaces();
     }
 
-    // 渲染工作区列表
+    // Render workspace list
     renderWorkspaces() {
-        // 清空容器
+        // Clear container
         this.workspaceContainer.innerHTML = '';
 
-        // 如果没有工作区，显示提示信息
+        // If no workspaces, show message
         if (this.workspaces.length === 0) {
             const emptyDiv = document.createElement('div');
             emptyDiv.className = 'empty-workspace';
-            emptyDiv.textContent = '没有工作区文件';
+            emptyDiv.textContent = t('no_workspace_files');
             this.workspaceContainer.appendChild(emptyDiv);
             return;
         }
 
-        // 渲染每个工作区
+        // Render each workspace
         this.workspaces.forEach(workspace => {
-            // 创建工作区项
+            // Create workspace item
             const workspaceItem = this.createWorkspaceItem(workspace);
             this.workspaceContainer.appendChild(workspaceItem);
 
-            // 渲染工作区下的文件
+            // Render files under workspace
             if (workspace.files && workspace.files.length > 0) {
                 workspace.files.forEach(file => {
                     const fileItem = this.createFileItem(file);
@@ -54,28 +56,28 @@ export class WorkspaceManager {
         });
     }
 
-    // 创建工作区项
+    // Create workspace item
     createWorkspaceItem(workspace) {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'workspace-item';
 
-        // 创建图标
+        // Create icon
         const iconDiv = document.createElement('div');
         iconDiv.className = 'workspace-icon';
         iconDiv.textContent = '📁';
         itemDiv.appendChild(iconDiv);
 
-        // 创建详情容器
+        // Create details container
         const detailsDiv = document.createElement('div');
         detailsDiv.className = 'workspace-details';
 
-        // 创建工作区名称
+        // Create workspace name
         const nameDiv = document.createElement('div');
         nameDiv.className = 'workspace-name';
         nameDiv.textContent = workspace.name;
         detailsDiv.appendChild(nameDiv);
 
-        // 创建修改时间
+        // Create modification time
         const dateDiv = document.createElement('div');
         dateDiv.className = 'workspace-date';
         dateDiv.textContent = this.formatDate(workspace.modified);
@@ -85,29 +87,29 @@ export class WorkspaceManager {
         return itemDiv;
     }
 
-    // 创建文件项
+    // Create file item
     createFileItem(file) {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'file-item';
         itemDiv.dataset.path = file.path;
 
-        // 创建图标
+        // Create icon
         const iconDiv = document.createElement('div');
         iconDiv.className = 'file-icon';
         iconDiv.textContent = this.getFileIcon(file.type);
         itemDiv.appendChild(iconDiv);
 
-        // 创建详情容器
+        // Create details container
         const detailsDiv = document.createElement('div');
         detailsDiv.className = 'file-details';
 
-        // 创建文件名称
+        // Create file name
         const nameDiv = document.createElement('div');
         nameDiv.className = 'file-name';
         nameDiv.textContent = file.name;
         detailsDiv.appendChild(nameDiv);
 
-        // 创建文件元信息
+        // Create file metadata
         const metaDiv = document.createElement('div');
         metaDiv.className = 'file-meta';
         metaDiv.textContent = `${this.formatFileSize(file.size)} · ${this.formatDate(file.modified)}`;
@@ -115,26 +117,26 @@ export class WorkspaceManager {
 
         itemDiv.appendChild(detailsDiv);
 
-        // 绑定点击事件
+        // Bind click event
         itemDiv.addEventListener('click', () => {
-            // 移除其他文件的选中状态
+            // Remove selected state from other files
             document.querySelectorAll('.file-item').forEach(item => {
                 item.classList.remove('selected');
             });
 
-            // 添加选中状态
+            // Add selected state
             itemDiv.classList.add('selected');
 
-            // 调用回调函数
+            // Call callback function
             if (this.fileClickCallback) {
-                this.fileClickCallback(file.path);
+                this.fileClickCallback(file);
             }
         });
 
         return itemDiv;
     }
 
-    // 获取文件图标
+    // Get file icon
     getFileIcon(fileType) {
         switch (fileType) {
             case 'txt':
@@ -156,7 +158,7 @@ export class WorkspaceManager {
         }
     }
 
-    // 格式化文件大小
+    // Format file size
     formatFileSize(size) {
         if (size < 1024) {
             return `${size} B`;
@@ -167,7 +169,7 @@ export class WorkspaceManager {
         }
     }
 
-    // 格式化日期
+    // Format date
     formatDate(timestamp) {
         if (!timestamp) return '';
 
@@ -175,49 +177,49 @@ export class WorkspaceManager {
         return date.toLocaleString();
     }
 
-    // 开始自动刷新计时器
+    // Start auto refresh timer
     startRefreshTimer() {
-        // 清除现有计时器
+        // Clear existing timer
         if (this.refreshTimer) {
             clearInterval(this.refreshTimer);
         }
 
-        // 重置倒计时值
+        // Reset countdown value
         this.countdownValue = 5;
-        this.refreshCountdownElement.textContent = `${this.countdownValue}秒后刷新`;
+        this.refreshCountdownElement.textContent = t('refresh_countdown', { seconds: this.countdownValue });
 
-        // 设置新计时器，每1秒更新一次
+        // Set new timer, update every 1 second
         this.refreshTimer = setInterval(() => {
             this.countdownValue--;
 
             if (this.countdownValue > 0) {
-                this.refreshCountdownElement.textContent = `${this.countdownValue}秒后刷新`;
+                this.refreshCountdownElement.textContent = t('refresh_countdown', { seconds: this.countdownValue });
             } else {
-                this.refreshCountdownElement.textContent = '刷新中...';
-                // 触发刷新
+                this.refreshCountdownElement.textContent = t('refresh');
+                // Trigger refresh
                 this.refreshWorkspaces();
-                // 重置倒计时
+                // Reset countdown
                 this.countdownValue = 5;
-                this.refreshCountdownElement.textContent = `${this.countdownValue}秒后刷新`;
+                this.refreshCountdownElement.textContent = t('refresh_countdown', { seconds: this.countdownValue });
             }
         }, 1000);
     }
 
-    // 刷新工作区文件
+    // Refresh workspace files
     async refreshWorkspaces() {
         try {
             const response = await fetch('/api/files');
             if (!response.ok) {
-                throw new Error(`API错误: ${response.status}`);
+                throw new Error(t('api_error', { status: response.status }));
             }
 
             const data = await response.json();
             this.updateWorkspaces(data.workspaces);
 
-            console.log('刷新文件列表');
+            console.log('Refreshed file list');
 
         } catch (error) {
-            console.error('刷新工作区文件错误:', error);
+            console.error(t('load_workspace_error', { message: error.message }));
         }
     }
 }
