@@ -6,9 +6,9 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="sith",
-    version="0.1.0",
-    author="Sith Team",
-    author_email="mannaandpoem@gmail.com",
+    version="0.0.1",
+    author="Celaya Solutions",
+    author_email="chris@chriscelaya.com",
     description="A versatile Sequentially Intelligence Task Handler that can solve various tasks using multiple tools",
     long_description=long_description,
     long_description_content_type="text/markdown",
