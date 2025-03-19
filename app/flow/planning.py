@@ -1,6 +1,6 @@
-import asyncio  # 添加导入
+import asyncio  # Add import
 import json
-import os  # 添加导入os模块
+import os  # Add os module import
 import time
 from typing import Dict, List, Optional, Union
 
@@ -84,10 +84,10 @@ class PlanningFlow(BaseFlow):
 
             result = ""
             while True:
-                # 检查是否被要求取消执行
+                # Check if execution cancellation was requested
                 if cancel_event and cancel_event.is_set():
                     logger.warning("Execution cancelled by user")
-                    return result + "\n执行已被用户取消"
+                    return result + "\nExecution has been cancelled by user"
 
                 # Get current step to execute
                 self.current_step_index, step_info = await self._get_current_step_info()
@@ -114,22 +114,21 @@ class PlanningFlow(BaseFlow):
 
     async def _create_initial_plan(self, request: str, job_id: str = None) -> None:
         """Create an initial plan based on the request using the flow's LLM and PlanningTool."""
-        # 如果提供了job_id，则使用它；否则生成一个基于请求的job_id
+        # If job_id is provided, use it; otherwise generate one based on the request
         if not job_id:
             job_id = f"job_{request[:8].replace(' ', '_')}"
-            if len(job_id) < 10:  # 如果太短，加上时间戳
+            if len(job_id) < 10:  # If too short, add a timestamp
                 job_id = f"job_{int(time.time())}"
 
         log_file_path = f"logs/{job_id}.log"
-        os.environ["OPENMANUS_TASK_ID"] = job_id
-        os.environ["OPENMANUS_LOG_FILE"] = log_file_path
+        os.environ["SITH_TASK_ID"] = job_id
+        os.environ["SITH_LOG_FILE"] = log_file_path
 
-        # 设置日志文件名为job_id
+        # Set log filename to job_id
         logger.add(log_file_path, rotation="100 MB")
 
         logger.info(f"Creating initial plan with ID: {self.active_plan_id}")
 
-        # 原有代码继续执行
         # Create a system message for plan creation
         system_message = Message.system_message(
             "You are a planning assistant. Create a concise, actionable plan with clear steps. "

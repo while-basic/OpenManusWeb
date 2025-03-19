@@ -1,5 +1,5 @@
 """
-LLM回调包装器，为现有LLM添加回调功能
+LLM Callback Wrapper, adds callback functionality to existing LLM
 """
 import functools
 import inspect
@@ -8,56 +8,56 @@ from typing import Any, Callable, Dict
 
 
 class LLMCallbackWrapper:
-    """为LLM添加回调功能的包装类"""
+    """Wrapper class that adds callback functionality to LLM"""
 
     def __init__(self, llm_instance):
         self._llm = llm_instance
         self._callbacks = {
-            "before_request": [],  # 发送请求前
-            "after_request": [],  # 收到回复后
-            "on_error": [],  # 发生错误时
+            "before_request": [],  # Before sending request
+            "after_request": [],  # After receiving response
+            "on_error": [],  # When an error occurs
         }
         self._wrap_methods()
 
     def _wrap_methods(self):
-        """包装LLM实例的方法以添加回调支持"""
-        # 常见的方法名称
+        """Wrap LLM instance methods to add callback support"""
+        # Common method names
         method_names = ["completion", "chat", "generate", "run", "call", "__call__"]
 
         for name in method_names:
             if hasattr(self._llm, name) and callable(getattr(self._llm, name)):
                 original_method = getattr(self._llm, name)
 
-                # 检查是否是异步方法
+                # Check if it's an async method
                 is_async = inspect.iscoroutinefunction(original_method)
 
                 if is_async:
 
                     @functools.wraps(original_method)
                     async def async_wrapped(*args, **kwargs):
-                        # 执行前回调
+                        # Execute before callbacks
                         request_data = {"args": args, "kwargs": kwargs}
                         self._execute_callbacks("before_request", request_data)
 
                         try:
-                            # 调用原始方法
+                            # Call the original method
                             result = await original_method(*args, **kwargs)
 
-                            # 执行后回调
+                            # Execute after callbacks
                             response_data = {
                                 "request": request_data,
                                 "response": result,
                             }
                             self._execute_callbacks("after_request", response_data)
 
-                            # 保存文件到当前工作目录（如果是在工作区内）
+                            # Save file to current working directory (if in workspace)
                             current_dir = os.getcwd()
                             if "workspace" in current_dir:
                                 self._save_conversation_to_file(args, kwargs, result)
 
                             return result
                         except Exception as e:
-                            # 错误回调
+                            # Error callback
                             error_data = {
                                 "request": request_data,
                                 "error": str(e),
@@ -66,21 +66,21 @@ class LLMCallbackWrapper:
                             self._execute_callbacks("on_error", error_data)
                             raise
 
-                    # 替换为包装后的方法
+                    # Replace with wrapped method
                     setattr(self, name, async_wrapped)
                 else:
 
                     @functools.wraps(original_method)
                     def wrapped(*args, **kwargs):
-                        # 执行前回调
+                        # Execute before callbacks
                         request_data = {"args": args, "kwargs": kwargs}
                         self._execute_callbacks("before_request", request_data)
 
                         try:
-                            # 调用原始方法
+                            # Call the original method
                             result = original_method(*args, **kwargs)
 
-                            # 执行后回调
+                            # Execute after callbacks
                             response_data = {
                                 "request": request_data,
                                 "response": result,
@@ -89,7 +89,7 @@ class LLMCallbackWrapper:
 
                             return result
                         except Exception as e:
-                            # 错误回调
+                            # Error callback
                             error_data = {
                                 "request": request_data,
                                 "error": str(e),
@@ -98,13 +98,13 @@ class LLMCallbackWrapper:
                             self._execute_callbacks("on_error", error_data)
                             raise
 
-                    # 替换为包装后的方法
+                    # Replace with wrapped method
                     setattr(self, name, wrapped)
 
     def _save_conversation_to_file(self, args, kwargs, result):
-        """保存对话到文件（如果设置了）"""
+        """Save conversation to file (if configured)"""
         try:
-            # 检查是否有保存对话的环境变量
+            # Check if there's an environment variable to save conversation
             if os.environ.get("SAVE_LLM_CONVERSATION", "0") == "1":
                 prompt = kwargs.get("prompt", "")
                 if not prompt and args:
@@ -113,13 +113,13 @@ class LLMCallbackWrapper:
                 if not prompt:
                     return
 
-                # 创建对话记录文件
+                # Create conversation record file
                 with open("llm_conversation.txt", "a", encoding="utf-8") as f:
                     f.write("\n--- LLM REQUEST ---\n")
-                    f.write(str(prompt)[:2000])  # 限制长度
+                    f.write(str(prompt)[:2000])  # Limit length
                     f.write("\n\n--- LLM RESPONSE ---\n")
 
-                    # 获取响应内容
+                    # Get response content
                     response_content = ""
                     if isinstance(result, str):
                         response_content = result
@@ -130,17 +130,17 @@ class LLMCallbackWrapper:
                     else:
                         response_content = str(result)
 
-                    f.write(response_content[:2000])  # 限制长度
+                    f.write(response_content[:2000])  # Limit length
                     f.write("\n\n--------------------\n")
         except Exception as e:
-            print(f"保存对话到文件时出错: {str(e)}")
+            print(f"Error saving conversation to file: {str(e)}")
 
     def register_callback(self, event_type: str, callback: Callable):
-        """注册回调函数
+        """Register a callback function
 
         Args:
-            event_type: 事件类型，可以是"before_request"、"after_request"或"on_error"
-            callback: 回调函数，接收相应的数据
+            event_type: Event type, can be "before_request", "after_request", or "on_error"
+            callback: Callback function that receives the corresponding data
         """
         if event_type in self._callbacks:
             self._callbacks[event_type].append(callback)
@@ -148,31 +148,31 @@ class LLMCallbackWrapper:
         return False
 
     def unregister_callback(self, event_type: str, callback: Callable):
-        """注销特定的回调函数"""
+        """Unregister a specific callback function"""
         if event_type in self._callbacks and callback in self._callbacks[event_type]:
             self._callbacks[event_type].remove(callback)
             return True
         return False
 
     def clear_callbacks(self, event_type: str = None):
-        """清除所有回调函数"""
+        """Clear all callback functions"""
         if event_type is None:
-            # 清除所有类型的回调
+            # Clear all types of callbacks
             for event in self._callbacks:
                 self._callbacks[event] = []
         elif event_type in self._callbacks:
-            # 清除特定类型的回调
+            # Clear callbacks of a specific type
             self._callbacks[event_type] = []
 
     def _execute_callbacks(self, event_type: str, data: Dict[str, Any]):
-        """执行指定类型的回调函数"""
+        """Execute callbacks of the specified type"""
         if event_type in self._callbacks:
             for callback in self._callbacks[event_type]:
                 try:
                     callback(data)
                 except Exception as e:
-                    print(f"回调执行出错: {str(e)}")
+                    print(f"Error executing callback: {str(e)}")
 
     def __getattr__(self, name):
-        """转发其他属性访问到原始LLM实例"""
+        """Forward other attribute access to the original LLM instance"""
         return getattr(self._llm, name)

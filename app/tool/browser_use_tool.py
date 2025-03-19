@@ -1,6 +1,6 @@
 import asyncio
 import json
-import logging  # 添加导入
+import logging  # Add import
 import time
 from typing import Optional, Union
 
@@ -168,7 +168,7 @@ class BrowserUseTool(BaseTool):
                 if action == "navigate":
                     if not url:
                         return ToolResult(error="URL is required for 'navigate' action")
-                    await context.navigate(url)
+                    await context.navigate_to(url)
                     return ToolResult(output=f"Navigated to {url}")
 
                 elif action == "click":

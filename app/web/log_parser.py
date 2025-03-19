@@ -1,5 +1,5 @@
 """
-Log parser module for extracting execution information from OpenManus log files.
+Log parser module for extracting execution information from Sith log files.
 """
 import os
 import re
@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 
 class LogParser:
-    """Parser for OpenManus log files to extract execution status and progress."""
+    """Parser for Sith log files to extract execution status and progress."""
 
     def __init__(self, log_path: str):
         """
@@ -144,7 +144,7 @@ class LogParser:
         """Extract tool execution information from the log."""
         # Match tool execution patterns
         tool_patterns = [
-            r"🛠️ Manus selected \d+ tools to use",
+            r"🛠️ Sith selected \d+ tools to use",
             r"🧰 Tools being prepared: \['([^']+)'\]",
             r"🔧 Activating tool: '([^']+)'...",
             r"🎯 Tool '([^']+)' completed its mission!",

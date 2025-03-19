@@ -1,8 +1,8 @@
 """
-日志监控调试工具 - 测试日志文件的读取和WebSocket通信
-使用方式:
-    1. 直接运行: python debug_log_monitor.py job_123456
-    2. 指定日志路径: python debug_log_monitor.py job_123456 --log_dir /path/to/logs
+Log Monitoring Debug Tool - Test log file reading and WebSocket communication
+Usage:
+    1. Direct run: python debug_log_monitor.py job_123456
+    2. Specify log path: python debug_log_monitor.py job_123456 --log_dir /path/to/logs
 """
 
 import argparse
@@ -15,22 +15,22 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 
-# 确定项目根目录
+# Determine project root directory
 try:
-    # 添加项目根目录到Python路径
+    # Add project root directory to Python path
     project_root = Path(__file__).parent.parent
     sys.path.append(str(project_root))
 
-    # 导入项目中的日志监视器
+    # Import log monitor from the project
     from app.utils.log_monitor import LogFileMonitor
 except ImportError as e:
-    print(f"导入错误: {e}")
-    print("请确保您在项目根目录或tools目录下运行此脚本")
+    print(f"Import error: {e}")
+    print("Please ensure you're running this script from the project root or tools directory")
     sys.exit(1)
 
 
 class DebugEventHandler(FileSystemEventHandler):
-    """处理文件系统事件的处理器，专注于日志文件变化"""
+    """File system event handler focused on log file changes"""
 
     def __init__(self, log_file_path):
         self.log_file_path = log_file_path
@@ -43,97 +43,97 @@ class DebugEventHandler(FileSystemEventHandler):
                     file.seek(self.last_position)
                     new_content = file.read()
                     if new_content:
-                        print(f"\n--- 检测到日志变化 ({time.strftime('%H:%M:%S')}) ---")
-                        print(f"读取内容: {len(new_content)} 字符")
-                        print(f"内容预览: {new_content[:100]}...")
+                        print(f"\n--- Log change detected ({time.strftime('%H:%M:%S')}) ---")
+                        print(f"Content read: {len(new_content)} characters")
+                        print(f"Content preview: {new_content[:100]}...")
                     self.last_position = file.tell()
             except Exception as e:
-                print(f"读取日志文件时出错: {e}")
+                print(f"Error reading log file: {e}")
 
 
 def test_log_monitor(job_id, log_dir=None):
-    """测试日志监视器功能"""
+    """Test log monitor functionality"""
     if not log_dir:
         log_dir = project_root / "logs"
     else:
         log_dir = Path(log_dir)
 
     log_file = log_dir / f"{job_id}.log"
-    print(f"[调试] 监控日志文件: {log_file}")
+    print(f"[Debug] Monitoring log file: {log_file}")
 
-    # 检查日志文件是否存在
+    # Check if log file exists
     if not log_file.exists():
-        print(f"[警告] 日志文件不存在: {log_file}")
-        print(f"正在创建空白日志文件以便测试...")
+        print(f"[Warning] Log file doesn't exist: {log_file}")
+        print(f"Creating empty log file for testing...")
         with open(log_file, "w") as f:
-            f.write(f"测试日志文件已创建于 {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Test log file created at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-    # 使用自定义处理器直接监控文件变化
-    print("[调试] 使用原始Watchdog监控文件变化...")
+    # Use custom handler to directly monitor file changes
+    print("[Debug] Using raw Watchdog to monitor file changes...")
     event_handler = DebugEventHandler(log_file)
     observer = Observer()
     observer.schedule(event_handler, path=str(log_dir), recursive=False)
     observer.start()
 
-    # 使用项目的LogFileMonitor测试
-    print("[调试] 使用项目LogFileMonitor监控...")
+    # Test using project's LogFileMonitor
+    print("[Debug] Monitoring using project's LogFileMonitor...")
     log_monitor = LogFileMonitor(job_id, str(log_dir))
     log_observer = log_monitor.start_monitoring()
 
     try:
-        # 附加一些测试日志用于验证
-        print(f"\n[调试] 写入一些测试日志到文件: {log_file}")
+        # Append some test logs for verification
+        print(f"\n[Debug] Writing some test logs to file: {log_file}")
         with open(log_file, "a") as f:
             for i in range(5):
-                test_log = f"{time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} | INFO     | test:debug:{i} - 测试日志 #{i+1}\n"
+                test_log = f"{time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} | INFO     | test:debug:{i} - Test log #{i+1}\n"
                 f.write(test_log)
                 f.flush()
                 time.sleep(1)
 
-        # 等待监控处理
+        # Wait for monitoring to process
         time.sleep(2)
 
-        # 检查LogFileMonitor是否捕获了日志
+        # Check if LogFileMonitor captured logs
         logs = log_monitor.get_log_entries()
-        print(f"\n[调试] LogFileMonitor捕获的日志条目: {len(logs)}")
+        print(f"\n[Debug] Log entries captured by LogFileMonitor: {len(logs)}")
         for i, log in enumerate(logs[-5:] if len(logs) > 5 else logs):
             print(f"  {i+1}. {log}")
 
-        # 模拟WebSocket消息
-        print("\n[调试] 模拟WebSocket消息...")
+        # Simulate WebSocket message
+        print("\n[Debug] Simulating WebSocket message...")
         ws_data = {
             "status": "processing",
             "system_logs": logs[-5:] if len(logs) > 5 else logs,
         }
-        print(f"JSON消息长度: {len(json.dumps(ws_data))} 字节")
-        print(f"示例消息内容: {json.dumps(ws_data, ensure_ascii=False)[:200]}...")
+        print(f"JSON message length: {len(json.dumps(ws_data))} bytes")
+        print(f"Sample message content: {json.dumps(ws_data, ensure_ascii=False)[:200]}...")
 
-        # 交互式循环，持续监控新日志
-        print("\n[调试] 进入监控模式，按回车继续，输入'q'退出...")
+        # Interactive loop, continuously monitor new logs
+        print("\n[Debug] Entering monitoring mode, press Enter to continue, 'q' to exit...")
         while True:
-            choice = input("命令(回车继续，'a'添加日志，'q'退出): ")
+            choice = input("Command (Enter to continue, 'a' to add log, 'q' to quit): ")
             if choice.lower() == "q":
                 break
             elif choice.lower() == "a":
-                # 添加新的测试日志
+                # Add new test log
                 with open(log_file, "a") as f:
-                    test_log = f"{time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} | INFO     | test:debug:{time.time()} - 手动添加的测试日志\n"
+                    test_log = f"{time.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} | INFO     | test:debug:{time.time()} - Manually added test log\n"
                     f.write(test_log)
-                    print(f"已添加测试日志: {test_log.strip()}")
+                    print(f"Added test log: {test_log.strip()}")
 
-            # 获取最新日志
+            # Get latest logs
             new_logs = log_monitor.get_log_entries()
             if len(new_logs) > len(logs):
-                print(f"\n[调试] 检测到 {len(new_logs) - len(logs)} 条新日志:")
+                print(f"\n[Debug] Detected {len(new_logs) - len(logs)} new logs:")
                 for log in new_logs[len(logs) :]:
                     print(f"  • {log}")
                 logs = new_logs
 
     except KeyboardInterrupt:
-        print("\n[调试] 用户中断测试")
+        print("\n[Debug] User interrupted test")
 
     finally:
-        print("[调试] 清理资源...")
+        print("[Debug] Cleaning up resources...")
         observer.stop()
         observer.join()
         log_observer.stop()
@@ -141,15 +141,15 @@ def test_log_monitor(job_id, log_dir=None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="日志监控调试工具")
-    parser.add_argument("job_id", help="要监控的作业ID，比如 job_12345")
-    parser.add_argument("--log_dir", help="日志目录路径", default=None)
+    parser = argparse.ArgumentParser(description="Log Monitoring Debug Tool")
+    parser.add_argument("job_id", help="Job ID to monitor, like job_12345")
+    parser.add_argument("--log_dir", help="Log directory path", default=None)
     args = parser.parse_args()
 
     print("=" * 60)
-    print(f"日志监控调试工具 v1.0")
-    print(f"测试job_id: {args.job_id}")
-    print(f"日志目录: {args.log_dir if args.log_dir else '默认'}")
+    print(f"Log Monitoring Debug Tool v1.0")
+    print(f"Testing job_id: {args.job_id}")
+    print(f"Log directory: {args.log_dir if args.log_dir else 'default'}")
     print("=" * 60)
 
     test_log_monitor(args.job_id, args.log_dir)

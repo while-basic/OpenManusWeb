@@ -139,7 +139,7 @@ class BaseAgent(BaseModel, ABC):
             ):
                 # Check for cancellation
                 if cancel_event and cancel_event.is_set():
-                    return "操作已被取消"
+                    return "Operation has been cancelled"
 
                 self.current_step += 1
                 logger.info(f"Executing step {self.current_step}/{self.max_steps}")

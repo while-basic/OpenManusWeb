@@ -18,6 +18,12 @@
             --button-primary: #4a6fa5;
             --button-secondary: #e0e0e0;
             --button-danger: #e74c3c;
+            
+            /* Error colors */
+            --error-info-color: #3498db;
+            --error-warning-color: #f39c12;
+            --error-error-color: #e74c3c;
+            --error-critical-color: #8e44ad;
         }
 
         * {
@@ -608,12 +614,141 @@
         .terminal-output .error {
             color: #ff6b6b;
         }
+        
+        /* Error Container Styles */
+        #error-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .error-message {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            transition: opacity 0.3s ease;
+            overflow: hidden;
+            animation: error-slide-in 0.3s ease;
+        }
+        
+        @keyframes error-slide-in {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .error-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            font-weight: bold;
+        }
+        
+        .error-body {
+            padding: 10px 15px 15px;
+            word-break: break-word;
+        }
+        
+        .error-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: inherit;
+        }
+        
+        /* Error severity styles */
+        .error-message.info {
+            border-left: 5px solid var(--error-info-color);
+        }
+        
+        .error-message.info .error-header {
+            background-color: #ebf5fb;
+            color: #2980b9;
+        }
+        
+        .error-message.warning {
+            border-left: 5px solid var(--error-warning-color);
+        }
+        
+        .error-message.warning .error-header {
+            background-color: #fef5e7;
+            color: #d35400;
+        }
+        
+        .error-message.error {
+            border-left: 5px solid var(--error-error-color);
+        }
+        
+        .error-message.error .error-header {
+            background-color: #fdedec;
+            color: #c0392b;
+        }
+        
+        .error-message.critical {
+            border-left: 5px solid var(--error-critical-color);
+        }
+        
+        .error-message.critical .error-header {
+            background-color: #f4ecf7;
+            color: #6c3483;
+        }
+        
+        /* Error categories */
+        .error-message.network .error-category::before {
+            content: '🌐 ';
+        }
+        
+        .error-message.api .error-category::before {
+            content: '🔌 ';
+        }
+        
+        .error-message.websocket .error-category::before {
+            content: '📡 ';
+        }
+        
+        .error-message.auth .error-category::before {
+            content: '🔒 ';
+        }
+        
+        .error-message.validation .error-category::before {
+            content: '✓ ';
+        }
+        
+        .error-message.server .error-category::before {
+            content: '🖥️ ';
+        }
+        
+        .error-message.terminal .error-category::before {
+            content: '💻 ';
+        }
+        
+        .error-message.file_system .error-category::before {
+            content: '📁 ';
+        }
+        
+        .error-message.general .error-category::before {
+            content: '⚠️ ';
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1 data-i18n="app_title">OpenManus <span class="emoji">🐱</span></h1>
+            <h1 data-i18n="app_title">Sith <span class="emoji">🐱</span></h1>
             <p class="subtitle" data-i18n="app_subtitle">AI智能助手 - 网页版</p>
             <div class="language-selector">
                 <select id="language-selector" aria-label="Language selector">
@@ -632,7 +767,7 @@
                     <div class="thinking-section">
                         <div class="section-header">
                             <h3 data-i18n="ai_thinking_process">AI思考过程</h3>
-                            <div class="record-count" id="record-count" data-i18n="records_count">0 条记录</div>
+                            <div class="record-count" id="record-count" data-i18n="records_count">0 Entry</div>
                         </div>
 
                         <div class="controls">
@@ -707,8 +842,8 @@
         </main>
 
         <footer>
-            <p><span data-i18n="ui_made_by">UI Made by:</span> <a href="https://space.bilibili.com/267577" target="_blank"><span data-i18n="creator_name">云栖AI</span></a></p>
-            <p><span data-i18n="powered_by">Powered by OpenManus -</span> <a href="https://github.com/mannaandpoem/OpenManus" target="_blank">GitHub</a></p>
+            <p><span data-i18n="ui_made_by">By:</span> <a href="https://chriscelaya.com" target="_blank"><span data-i18n="creator_name">Celaya Solutions</span></a></p>
+            <p><span data-i18n="powered_by">Powered by Sith -</span> <a href="https://github.com/while-basic" target="_blank">GitHub</a></p>
         </footer>
     </div>
 

@@ -1,5 +1,5 @@
 """
-为流程添加思考过程追踪功能
+Add thinking process tracking functionality to the flow
 """
 from functools import wraps
 
@@ -7,25 +7,25 @@ from app.web.thinking_tracker import ThinkingTracker
 
 
 class FlowTracker:
-    """流程跟踪器，用于钩入流程执行过程，添加思考步骤记录"""
+    """Flow tracker, used to hook into the flow execution process, adding thinking step records"""
 
     @staticmethod
     def patch_flow(flow_obj, session_id: str):
-        """为流程对象应用跟踪补丁"""
+        """Apply tracking patch to the flow object"""
         if not hasattr(flow_obj, "_original_execute"):
-            # 保存原始方法
+            # Save original method
             flow_obj._original_execute = flow_obj.execute
 
-            # 添加会话ID
+            # Add session ID
             flow_obj._tracker_session_id = session_id
 
-            # 替换execute方法
+            # Replace execute method
             @wraps(flow_obj._original_execute)
             async def tracked_execute(prompt, *args, **kwargs):
-                # 在执行前添加思考步骤
-                ThinkingTracker.add_thinking_step(session_id, "开始执行流程")
+                # Add thinking step before execution
+                ThinkingTracker.add_thinking_step(session_id, "Start executing flow")
 
-                # 跟踪子步骤执行
+                # Track sub-step execution
                 if hasattr(flow_obj, "_execute_step"):
                     original_step = flow_obj._execute_step
 
@@ -34,21 +34,21 @@ class FlowTracker:
                         if hasattr(flow_obj, "current_step_description"):
                             step_desc = flow_obj.current_step_description
                             ThinkingTracker.add_thinking_step(
-                                session_id, f"执行步骤: {step_desc}"
+                                session_id, f"Execute step: {step_desc}"
                             )
                         else:
-                            ThinkingTracker.add_thinking_step(session_id, "执行流程步骤")
+                            ThinkingTracker.add_thinking_step(session_id, "Execute flow step")
 
                         result = await original_step()
                         return result
 
                     flow_obj._execute_step = tracked_step
 
-                # 执行原始方法
+                # Execute original method
                 result = await flow_obj._original_execute(prompt, *args, **kwargs)
 
-                # 在执行后添加思考步骤
-                ThinkingTracker.add_thinking_step(session_id, "流程执行完成")
+                # Add thinking step after execution
+                ThinkingTracker.add_thinking_step(session_id, "Flow execution completed")
 
                 return result
 

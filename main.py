@@ -3,13 +3,13 @@ import asyncio
 import os
 import sys
 
-from app.agent.manus import Manus
+from app.agent.sith import Sith
 from app.logger import logger
 
 
 async def run_cli():
     """Run command line interactive mode"""
-    agent = Manus()
+    agent = Sith()
     while True:
         try:
             prompt = input("Enter your prompt (or 'exit'/'quit' to quit): ")
@@ -41,7 +41,7 @@ def run_web():
         logger.error("Exiting application. Please install the necessary dependencies and try again.")
         return 1
 
-    logger.info("🚀 OpenManus Web application is starting...")
+    logger.info("🚀 Sith Web application is starting...")
     logger.info("Visit http://localhost:8000 to get started")
 
     # Set environment variable to enable auto-open browser
@@ -54,7 +54,7 @@ def run_web():
 
 def main():
     """Main program entry, parse command line arguments to decide running mode"""
-    parser = argparse.ArgumentParser(description="OpenManus - AI Assistant")
+    parser = argparse.ArgumentParser(description="Sith - Sequentially Intelligence Task Handler")
     parser.add_argument("--web", action="store_true", help="Run in Web application mode (default is command line mode)")
 
     args = parser.parse_args()

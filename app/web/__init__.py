@@ -1,3 +1,3 @@
-"""OpenManus Web应用模块"""
+"""Sith Web Application Module"""
 
-# 该模块包含OpenManus的Web界面实现
+# This module contains the Web interface implementation for Sith

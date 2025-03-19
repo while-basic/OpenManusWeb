@@ -1,57 +1,60 @@
 import argparse
 import os
+import pathlib
 import sys
-from pathlib import Path
+
+# Add the parent directory to sys.path
+parent_dir = pathlib.Path(__file__).parent.resolve()
+sys.path.append(str(parent_dir))
 
 import uvicorn
+from loguru import logger
 
 
-# Check WebSocket dependencies
 def check_websocket_dependencies():
-    pass
+    """Check if necessary dependencies for websocket functionality are installed."""
+    try:
+        import websockets
+        import aiofiles
+        return True
+    except ImportError as e:
+        logger.error(f"Missing dependency: {str(e)}")
+        logger.error("Please install required dependencies with: pip install websockets aiofiles")
+        return False
 
-    return True
 
-
-# Ensure directory structure exists
 def ensure_directories():
-    # Create templates directory
-    templates_dir = Path("app/web/templates")
-    templates_dir.mkdir(parents=True, exist_ok=True)
+    """Ensure required directories exist."""
+    # Create the necessary directories
+    os.makedirs("logs", exist_ok=True)
+    os.makedirs("workspace", exist_ok=True)
+    os.makedirs("reports", exist_ok=True)
 
-    # Create static directory
-    static_dir = Path("app/web/static")
-    static_dir.mkdir(parents=True, exist_ok=True)
 
-    # Ensure __init__.py file exists
-    init_file = Path("app/web/__init__.py")
-    if not init_file.exists():
-        init_file.touch()
+def main():
+    """Run the web server."""
+    parser = argparse.ArgumentParser(description="Sith Web Application Server")
+    parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to run the server on")
+    args = parser.parse_args()
+
+    # Ensure required directories exist
+    ensure_directories()
+
+    # Check for websocket dependencies
+    if not check_websocket_dependencies():
+        logger.error("Exiting application. Please install the necessary dependencies and try again.")
+        return 1
+
+    # Set environment variable to enable auto-open browser
+    os.environ["AUTO_OPEN_BROWSER"] = "1"
+
+    # Start the web server
+    print(f"🚀 Sith Web application is starting...")
+    print(f"Visit http://{args.host if args.host != '0.0.0.0' else 'localhost'}:{args.port} to get started")
+    uvicorn.run("app.web.app:app", host=args.host, port=args.port)
+    return 0
 
 
 if __name__ == "__main__":
-    # Add command line arguments
-    parser = argparse.ArgumentParser(description="OpenManus Web Application Server")
-    parser.add_argument("--no-browser", action="store_true", help="Don't automatically open browser at startup")
-    parser.add_argument("--port", type=int, default=8000, help="Server listening port (default: 8000)")
-
-    args = parser.parse_args()
-
-    ensure_directories()
-
-    if not check_websocket_dependencies():
-        print("Exiting application. Please install the necessary dependencies and try again.")
-        sys.exit(1)
-
-    # Set environment variable to control auto-open browser
-    if args.no_browser:
-        os.environ["AUTO_OPEN_BROWSER"] = "0"
-    else:
-        os.environ["AUTO_OPEN_BROWSER"] = "1"
-
-    port = args.port
-
-    print(f"🚀 OpenManus Web application is starting...")
-    print(f"Visit http://localhost:{port} to get started")
-
-    uvicorn.run("app.web.app:app", host="0.0.0.0", port=port, reload=True)
+    sys.exit(main())

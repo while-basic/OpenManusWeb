@@ -1,4 +1,4 @@
-// OpenManus Web UI Main Script
+// Sith Web UI Main Script
 
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize UI components
@@ -609,7 +609,7 @@ function initWebSocket() {
         
         const messageHeader = document.createElement('div');
         messageHeader.className = 'message-header';
-        messageHeader.innerHTML = '<span class="avatar">🤖</span><span class="sender">OpenManus</span>';
+        messageHeader.innerHTML = '<span class="avatar">🤖</span><span class="sender">Sith</span>';
         
         const messageContent = document.createElement('div');
         messageContent.className = 'message-content';

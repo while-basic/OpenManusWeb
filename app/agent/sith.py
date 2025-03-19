@@ -1,7 +1,7 @@
 from pydantic import Field
 
 from app.agent.toolcall import ToolCallAgent
-from app.prompt.manus import NEXT_STEP_PROMPT, SYSTEM_PROMPT
+from app.prompt.sith import NEXT_STEP_PROMPT, SYSTEM_PROMPT
 from app.tool import Terminate, ToolCollection
 from app.tool.browser_use_tool import BrowserUseTool
 from app.tool.file_saver import FileSaver
@@ -9,7 +9,7 @@ from app.tool.google_search import GoogleSearch
 from app.tool.python_execute import PythonExecute
 
 
-class Manus(ToolCallAgent):
+class Sith(ToolCallAgent):
     """
     A versatile general-purpose agent that uses planning to solve various tasks.
 
@@ -18,9 +18,9 @@ class Manus(ToolCallAgent):
     to handle a wide range of user requests.
     """
 
-    name: str = "Manus"
+    name: str = "Sith"
     description: str = (
-        "A versatile agent that can solve various tasks using multiple tools"
+        "A versatile Sequentially Intelligence Task Handler that can solve various tasks using multiple tools"
     )
 
     system_prompt: str = SYSTEM_PROMPT
