@@ -3,6 +3,7 @@ from app.agent.planning import PlanningAgent
 from app.agent.react import ReActAgent
 from app.agent.swe import SWEAgent
 from app.agent.toolcall import ToolCallAgent
+from app.agent.memory import MemoryAgent, MemoryItem
 
 
 __all__ = [
@@ -11,4 +12,6 @@ __all__ = [
     "ReActAgent",
     "SWEAgent",
     "ToolCallAgent",
+    "MemoryAgent",
+    "MemoryItem",
 ]

@@ -1,3 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
 # LLM Integration Rules
 
 ## Configuration

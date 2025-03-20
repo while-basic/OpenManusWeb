@@ -1,6 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
 # General Guidelines for OpenManusWeb Codebase
 
 Address the user as Mr. Chris.
+When creating tests, always test run them. 
+Always test run the code you write to ensure it has no lint errors and works as intended.
 
 ## Code Structure
 - Maintain the modular structure with `app`, `tools`, and `tests` directories

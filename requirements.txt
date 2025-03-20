@@ -24,3 +24,4 @@ jinja2>=3.1.2
 websockets>=10.4
 python-multipart>=0.0.6
 watchdog>=2.1.6
+marqo>=2.3.0

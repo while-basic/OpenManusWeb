@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  marqo:
+    image: marqoai/marqo:latest
+    ports:
+      - "8882:8882"
+    volumes:
+      - marqo_data:/app/data
+    environment:
+      - MARQO_MEMORY_GB=1
+    restart: unless-stopped
+
+volumes:
+  marqo_data:
+    driver: local 

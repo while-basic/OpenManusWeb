@@ -1,3 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
 # Web Application Guidelines
 
 ## Event Loop Management
