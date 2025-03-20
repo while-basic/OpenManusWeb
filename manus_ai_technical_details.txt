@@ -1,0 +1,12 @@
+Key Technical Details of Manus AI:
+
+Architecture:
+- Multithreaded agentic architecture for parallel processing and autonomous decision-making
+
+Algorithms:
+- Advanced machine learning algorithms, including large language models, computer vision, and reinforcement learning
+
+Hardware Components:
+- Sensors, actuators, and specialized processing units for physical embodiment and interaction
+
+The Manus AI system integrates these novel architectural, algorithmic, and hardware elements to enable its advanced autonomous capabilities as a general AI agent.

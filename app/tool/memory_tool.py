@@ -3,6 +3,7 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
 from app.tool.base import BaseTool
+from app.logger import logger
 
 
 class MemorySearchInput(BaseModel):
@@ -58,7 +59,7 @@ class MemoryTool(BaseTool):
             else:
                 raise ValueError("Memory agent not available in app state")
         except (ImportError, ValueError) as e:
-            self.logger.error(f"Failed to get memory agent: {e}")
+            logger.error(f"Failed to get memory agent: {e}")
             raise HTTPException(status_code=503, detail="Memory agent not available")
     
     async def execute(self, **kwargs) -> Dict[str, Any]:
@@ -114,7 +115,7 @@ class MemoryTool(BaseTool):
         Returns:
             Results from memory matching the query
         """
-        self.logger.info(f"Searching memory: {input_data.query}")
+        logger.info(f"Searching memory: {input_data.query}")
         try:
             results = self._memory_agent.query_memory(
                 query=input_data.query,
@@ -127,7 +128,7 @@ class MemoryTool(BaseTool):
                 "query": input_data.query
             }
         except Exception as e:
-            self.logger.error(f"Memory search error: {e}")
+            logger.error(f"Memory search error: {e}")
             return {
                 "error": str(e),
                 "results": [],
@@ -144,7 +145,7 @@ class MemoryTool(BaseTool):
         Returns:
             Success status and ID of the stored memory
         """
-        self.logger.info(f"Storing memory: {input_data.content[:50]}...")
+        logger.info(f"Storing memory: {input_data.content[:50]}...")
         try:
             metadata = input_data.metadata or {}
             
@@ -160,7 +161,7 @@ class MemoryTool(BaseTool):
                 "message": "Memory stored successfully"
             }
         except Exception as e:
-            self.logger.error(f"Memory store error: {e}")
+            logger.error(f"Memory store error: {e}")
             return {
                 "success": False,
                 "error": str(e),

@@ -1,0 +1,16 @@
+Manus AI has approximately 15 key tools and capabilities, including:
+- Natural language processing and generation
+- Multimodal understanding (text, images, audio)
+- Logical reasoning and problem-solving
+- Task planning and execution
+- Knowledge retrieval and synthesis
+- Personalized assistance and context awareness
+- Continuous learning and adaptation
+- Multilingual support
+- Secure and privacy-preserving
+- Scalable and high-performance
+- Automated workflow and task automation
+- Data analysis and visualization
+- Code generation and programming
+- Creative content creation
+- Conversational AI and virtual assistance
