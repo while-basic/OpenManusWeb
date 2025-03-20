@@ -7,6 +7,39 @@ document.addEventListener('DOMContentLoaded', function() {
     initFileViewer();
     initTerminal();
     
+    // Initialize chat interface - MOST IMPORTANT
+    const sendButton = document.getElementById('send-btn');
+    const userInput = document.getElementById('user-input');
+    const stopButton = document.getElementById('stop-btn');
+    
+    if (sendButton && userInput) {
+        console.log('Initializing chat interface...');
+        // Direct event handler attachment
+        sendButton.onclick = function() {
+            const message = userInput.value.trim();
+            if (message) {
+                sendChatMessage(message);
+            }
+        };
+        
+        userInput.onkeydown = function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                const message = userInput.value.trim();
+                if (message) {
+                    sendChatMessage(message);
+                }
+            }
+        };
+        
+        if (stopButton) {
+            stopButton.onclick = stopProcessing;
+            stopButton.disabled = true;
+        }
+    } else {
+        console.error('Chat interface elements not found!');
+    }
+    
     // Load system logs
     loadSystemLogs();
     
@@ -457,11 +490,6 @@ function getStatusText(status) {
 
 // Initialize WebSocket connection for real-time updates
 function initWebSocket() {
-    let socket = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
-    const reconnectDelay = 2000; // 2 seconds
-    
     // Get session ID from URL if available
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
@@ -471,443 +499,467 @@ function initWebSocket() {
         return;
     }
     
-    // Function to establish WebSocket connection
-    const connect = () => {
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/${sessionId}`;
-        
-        socket = new WebSocket(wsUrl);
-        
-        socket.onopen = function() {
-            console.log('WebSocket connection established');
-            reconnectAttempts = 0;
-            updateStatus('Connected');
-        };
-        
-        socket.onclose = function(event) {
-            console.log('WebSocket connection closed', event);
-            updateStatus('Disconnected');
-            
-            // Try to reconnect if not a normal closure
-            if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
-                reconnectAttempts++;
-                updateStatus(`Reconnecting (${reconnectAttempts}/${maxReconnectAttempts})...`);
-                setTimeout(connect, reconnectDelay);
-            }
-        };
-        
-        socket.onerror = function(error) {
-            console.error('WebSocket error:', error);
-            updateStatus('Connection Error');
-        };
-        
-        socket.onmessage = function(event) {
-            handleWebSocketMessage(event.data);
-        };
-    };
+    // Initialize global socket variable
+    window.socket = null;
+    window.reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 2000; // 2 seconds
     
-    // Function to update connection status indicator
-    const updateStatus = (status) => {
-        const statusIndicator = document.getElementById('status-indicator');
-        if (statusIndicator) {
-            statusIndicator.textContent = status;
-        }
-    };
-    
-    // Function to handle incoming WebSocket messages
-    const handleWebSocketMessage = (data) => {
-        try {
-            const message = JSON.parse(data);
-            
-            // Handle different message types
-            switch (message.type) {
-                case 'thinking_step':
-                    addThinkingStep(message);
-                    break;
-                    
-                case 'ai_message':
-                    addAIMessage(message.content);
-                    break;
-                    
-                case 'file_generated':
-                    addGeneratedFile(message.file);
-                    break;
-                    
-                case 'terminal_update':
-                    updateTerminal(message);
-                    break;
-                    
-                case 'system_logs':
-                    updateSystemLogs(message.logs);
-                    break;
-                    
-                case 'completed':
-                    markProcessingComplete();
-                    break;
-                    
-                default:
-                    console.log('Unknown message type:', message.type);
-            }
-        } catch (error) {
-            console.error('Error processing WebSocket message:', error);
-        }
-    };
-    
-    // Function to add thinking step
-    const addThinkingStep = (step) => {
-        const thinkingSteps = document.getElementById('thinking-steps');
-        if (!thinkingSteps) return;
-        
-        const stepElement = document.createElement('div');
-        stepElement.className = 'thinking-step';
-        
-        // Create header with step number and timestamp
-        const header = document.createElement('div');
-        header.className = 'thinking-step-header';
-        
-        const stepNumber = document.createElement('div');
-        stepNumber.className = 'thinking-step-number';
-        stepNumber.textContent = `Step ${step.thought_number || ''}`;
-        
-        const timestamp = document.createElement('div');
-        timestamp.className = 'thinking-step-timestamp';
-        timestamp.textContent = new Date().toLocaleTimeString();
-        
-        header.appendChild(stepNumber);
-        header.appendChild(timestamp);
-        
-        // Create content
-        const content = document.createElement('div');
-        content.className = 'thinking-step-content';
-        
-        if (step.thought_number && step.total_thoughts) {
-            content.innerHTML = `<strong>Thought ${step.thought_number}/${step.total_thoughts}:</strong> ${step.content}`;
-        } else {
-            content.textContent = step.content;
-        }
-        
-        // Assemble the step element
-        stepElement.appendChild(header);
-        stepElement.appendChild(content);
-        
-        thinkingSteps.appendChild(stepElement);
-        thinkingSteps.scrollTop = thinkingSteps.scrollHeight;
-        
-        // Switch to thinking tab if this is the first step
-        if (step.thought_number === 1) {
-            document.querySelector('.log-tab[data-target="thinking-logs"]').click();
-        }
-    };
-    
-    // Function to add AI message to chat
-    const addAIMessage = (content) => {
-        const chatMessages = document.getElementById('chat-messages');
-        if (!chatMessages) return;
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message ai-message';
-        
-        const messageHeader = document.createElement('div');
-        messageHeader.className = 'message-header';
-        messageHeader.innerHTML = '<span class="avatar">🤖</span><span class="sender">Sith</span>';
-        
-        const messageContent = document.createElement('div');
-        messageContent.className = 'message-content';
-        messageContent.textContent = content;
-        
-        messageDiv.appendChild(messageHeader);
-        messageDiv.appendChild(messageContent);
-        
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    };
-    
-    // Function to add generated file
-    const addGeneratedFile = (file) => {
-        const filesList = document.getElementById('files-list');
-        if (!filesList) return;
-        
-        const fileItem = document.createElement('div');
-        fileItem.className = 'file-item';
-        fileItem.dataset.path = file.path;
-        
-        // Determine file icon based on extension
-        let icon = '📄';
-        const ext = file.name.split('.').pop().toLowerCase();
-        if (['jpg', 'jpeg', 'png', 'gif', 'svg'].includes(ext)) {
-            icon = '🖼️';
-        } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
-            icon = '🔊';
-        } else if (['mp4', 'webm', 'mov'].includes(ext)) {
-            icon = '🎬';
-        } else if (['zip', 'tar', 'gz', 'rar'].includes(ext)) {
-            icon = '📦';
-        } else if (['pdf'].includes(ext)) {
-            icon = '📰';
-        } else if (['doc', 'docx', 'txt', 'md'].includes(ext)) {
-            icon = '📝';
-        } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
-            icon = '📊';
-        } else if (['js', 'ts', 'py', 'java', 'c', 'cpp', 'php', 'html', 'css'].includes(ext)) {
-            icon = '💻';
-        }
-        
-        fileItem.innerHTML = `
-            <div class="file-icon">${icon}</div>
-            <div class="file-name">${file.name}</div>
-            <div class="file-meta">${formatFileSize(file.size)}</div>
-        `;
-        
-        fileItem.addEventListener('click', () => {
-            viewFile(file.path);
-        });
-        
-        filesList.appendChild(fileItem);
-    };
-    
-    // Function to update terminal with new output
-    const updateTerminal = (data) => {
-        const terminalOutput = document.getElementById('terminal-output');
-        if (!terminalOutput) return;
-        
-        if (data.output) {
-            const outputElement = document.createElement('div');
-            outputElement.className = 'result';
-            outputElement.textContent = data.output;
-            terminalOutput.appendChild(outputElement);
-        }
-        
-        if (data.error) {
-            const errorElement = document.createElement('div');
-            errorElement.className = 'error';
-            errorElement.textContent = data.error;
-            terminalOutput.appendChild(errorElement);
-        }
-        
-        terminalOutput.scrollTop = terminalOutput.scrollHeight;
-    };
-    
-    // Function to update system logs
-    const updateSystemLogs = (logs) => {
-        if (!logs || logs.length === 0) return;
-        
-        const logsContent = document.getElementById('logs-content');
-        if (!logsContent) return;
-        
-        logs.forEach(logText => {
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-line';
-            logEntry.textContent = logText;
-            logsContent.appendChild(logEntry);
-        });
-        
-        logsContent.scrollTop = logsContent.scrollHeight;
-    };
-    
-    // Function to mark processing as complete
-    const markProcessingComplete = () => {
-        const statusIndicator = document.getElementById('status-indicator');
-        if (statusIndicator) {
-            statusIndicator.textContent = 'Processing completed';
-        }
-        
-        // Enable send button and disable stop button
-        const sendButton = document.getElementById('send-btn');
-        const stopButton = document.getElementById('stop-btn');
-        
-        if (sendButton) sendButton.disabled = false;
-        if (stopButton) stopButton.disabled = true;
-    };
-    
-    // Function to view file content
-    const viewFile = async (filePath) => {
-        try {
-            const response = await fetch(`/api/files/${encodeURIComponent(filePath)}`);
-            if (!response.ok) {
-                throw new Error(`API error: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            const fileViewer = document.getElementById('file-viewer');
-            const fileTitle = document.getElementById('file-viewer-title');
-            const fileContent = document.getElementById('file-content');
-            
-            if (fileViewer && fileTitle && fileContent) {
-                fileTitle.textContent = data.name;
-                fileContent.textContent = data.content;
-                fileViewer.classList.add('active');
-            }
-        } catch (error) {
-            console.error('Error viewing file:', error);
-        }
-    };
-    
-    // Helper function to format file size
-    const formatFileSize = (bytes) => {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-    };
-    
-    // Start the WebSocket connection
+    // Connect to WebSocket
     connect();
+}
+
+// Function to establish WebSocket connection
+function connect() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
     
-    // Handle send button click
+    if (!sessionId) {
+        console.log('No session ID found, WebSocket connection not established');
+        return;
+    }
+    
+    console.log('Connecting to WebSocket with session ID:', sessionId);
+    
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/${sessionId}`;
+    
+    console.log('WebSocket URL:', wsUrl);
+    
+    window.socket = new WebSocket(wsUrl);
+    
+    window.socket.onopen = function() {
+        console.log('WebSocket connection established');
+        updateStatus('Connected');
+    };
+    
+    window.socket.onclose = function(event) {
+        console.log('WebSocket connection closed', event);
+        updateStatus('Disconnected');
+        
+        // Try to reconnect if not a normal closure
+        if (event.code !== 1000) {
+            setTimeout(connect, 2000);
+        }
+    };
+    
+    window.socket.onerror = function(error) {
+        console.error('WebSocket error:', error);
+        updateStatus('Connection Error');
+    };
+    
+    window.socket.onmessage = function(event) {
+        console.log('WebSocket message received:', event.data);
+        
+        try {
+            const data = JSON.parse(event.data);
+            handleWebSocketMessage(data);
+        } catch (error) {
+            console.error('Error parsing WebSocket message:', error, event.data);
+        }
+    };
+}
+
+// Function to update status indicator
+function updateStatus(status) {
+    const statusIndicator = document.getElementById('status-indicator');
+    if (statusIndicator) {
+        statusIndicator.textContent = status;
+    }
+}
+
+// Function to handle WebSocket messages
+function handleWebSocketMessage(data) {
+    console.log('Processing WebSocket message:', data);
+    
+    if (data.type === 'thinking' || data.type === 'thinking_step') {
+        // Handle thinking step
+        addThinkingStep(data);
+    } 
+    else if (data.type === 'response' || data.type === 'ai_message') {
+        // Handle assistant response
+        addAIMessage(data.content);
+        markProcessingComplete();
+    } 
+    else if (data.type === 'error') {
+        // Handle error message
+        addSystemErrorMessage(data.message || 'An error occurred');
+        markProcessingComplete();
+    } 
+    else if (data.type === 'terminal_update') {
+        // Handle terminal output
+        updateTerminal(data);
+    } 
+    else if (data.type === 'system_logs') {
+        // Handle system logs update
+        updateSystemLogs(data.logs);
+    } 
+    else if (data.type === 'file_generated') {
+        // Handle generated file
+        addGeneratedFile(data.file);
+    }
+    else if (data.type === 'processing_complete' || data.type === 'completed') {
+        // Handle processing completion
+        markProcessingComplete();
+    }
+    else {
+        console.log('Unknown message type:', data.type);
+    }
+}
+
+// Function to add AI message to chat
+function addAIMessage(content) {
+    const chatMessages = document.getElementById('chat-messages');
+    if (!chatMessages) return;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message ai-message';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    
+    // Format message content (handle simple markdown)
+    const formattedContent = formatMessage(content);
+    messageContent.innerHTML = formattedContent;
+    
+    messageDiv.appendChild(messageContent);
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Function to format message (handle simple markdown)
+function formatMessage(content) {
+    if (!content) return '';
+    
+    // Escape HTML
+    let formatted = content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // Handle code blocks
+    formatted = formatted.replace(/\`\`\`([^\`]+)\`\`\`/g, '<pre><code>$1</code></pre>');
+    
+    // Handle inline code
+    formatted = formatted.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+    
+    // Handle bold
+    formatted = formatted.replace(/\*\*([^\*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // Handle italic
+    formatted = formatted.replace(/\*([^\*]+)\*/g, '<em>$1</em>');
+    
+    // Handle line breaks
+    formatted = formatted.replace(/\n/g, '<br>');
+    
+    return formatted;
+}
+
+// Function to add thinking step
+function addThinkingStep(step) {
+    const thinkingSteps = document.getElementById('thinking-steps');
+    if (!thinkingSteps) return;
+    
+    // Create step container
+    const stepElement = document.createElement('div');
+    stepElement.className = 'thinking-step';
+    
+    // Get step data
+    const stepNumber = step.step_number || step.index || 0;
+    const stepContent = step.content || step.thinking || step.text || '';
+    const stepType = step.type || 'thinking';
+    
+    // Create step header with step number
+    const stepHeader = document.createElement('div');
+    stepHeader.className = 'step-header';
+    stepHeader.innerHTML = `<span class="step-number">${stepNumber}</span>`;
+    
+    // Create step content
+    const stepContentElement = document.createElement('div');
+    stepContentElement.className = 'step-content';
+    
+    // Format content (handle simple markdown)
+    const formattedContent = formatMessage(stepContent);
+    stepContentElement.innerHTML = formattedContent;
+    
+    // Add content to step
+    stepElement.appendChild(stepHeader);
+    stepElement.appendChild(stepContentElement);
+    
+    // Add to thinking steps
+    thinkingSteps.appendChild(stepElement);
+    thinkingSteps.scrollTop = thinkingSteps.scrollHeight;
+    
+    // Switch to thinking tab if this is the first thinking step
+    if (stepNumber === 1) {
+        document.querySelector('.log-tab[data-target="thinking-logs"]').click();
+    }
+}
+
+// Function to add generated file
+function addGeneratedFile(file) {
+    const filesList = document.getElementById('files-list');
+    if (!filesList) return;
+    
+    const fileItem = document.createElement('div');
+    fileItem.className = 'file-item';
+    fileItem.dataset.path = file.path;
+    
+    // Determine file icon based on extension
+    let icon = '📄';
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'svg'].includes(ext)) {
+        icon = '��️';
+    } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
+        icon = '🔊';
+    } else if (['mp4', 'webm', 'mov'].includes(ext)) {
+        icon = '🎬';
+    } else if (['zip', 'tar', 'gz', 'rar'].includes(ext)) {
+        icon = '📦';
+    } else if (['pdf'].includes(ext)) {
+        icon = '📰';
+    } else if (['doc', 'docx', 'txt', 'md'].includes(ext)) {
+        icon = '📝';
+    } else if (['xls', 'xlsx', 'csv'].includes(ext)) {
+        icon = '📊';
+    } else if (['js', 'ts', 'py', 'java', 'c', 'cpp', 'php', 'html', 'css'].includes(ext)) {
+        icon = '💻';
+    }
+    
+    fileItem.innerHTML = `
+        <div class="file-icon">${icon}</div>
+        <div class="file-name">${file.name}</div>
+        <div class="file-meta">${formatFileSize(file.size)}</div>
+    `;
+    
+    fileItem.addEventListener('click', () => {
+        viewFile(file.path);
+    });
+    
+    filesList.appendChild(fileItem);
+}
+
+// Function to update terminal with new output
+function updateTerminal(data) {
+    const terminalOutput = document.getElementById('terminal-output');
+    if (!terminalOutput) return;
+    
+    if (data.output) {
+        const outputElement = document.createElement('div');
+        outputElement.className = 'result';
+        outputElement.textContent = data.output;
+        terminalOutput.appendChild(outputElement);
+    }
+    
+    if (data.error) {
+        const errorElement = document.createElement('div');
+        errorElement.className = 'error';
+        errorElement.textContent = data.error;
+        terminalOutput.appendChild(errorElement);
+    }
+    
+    terminalOutput.scrollTop = terminalOutput.scrollHeight;
+}
+
+// Function to update system logs
+function updateSystemLogs(logs) {
+    if (!logs || logs.length === 0) return;
+    
+    const logsContent = document.getElementById('logs-content');
+    if (!logsContent) return;
+    
+    logs.forEach(logText => {
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-line';
+        logEntry.textContent = logText;
+        logsContent.appendChild(logEntry);
+    });
+    
+    logsContent.scrollTop = logsContent.scrollHeight;
+}
+
+// Function to mark processing as complete
+function markProcessingComplete() {
+    const statusIndicator = document.getElementById('status-indicator');
+    if (statusIndicator) {
+        statusIndicator.textContent = 'Processing completed';
+    }
+    
+    // Enable send button and disable stop button
     const sendButton = document.getElementById('send-btn');
+    const stopButton = document.getElementById('stop-btn');
+    
+    if (sendButton) sendButton.disabled = false;
+    if (stopButton) stopButton.disabled = true;
+}
+
+// Function to view file content
+async function viewFile(filePath) {
+    try {
+        const response = await fetch(`/api/files/${encodeURIComponent(filePath)}`);
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        const fileViewer = document.getElementById('file-viewer');
+        const fileTitle = document.getElementById('file-viewer-title');
+        const fileContent = document.getElementById('file-content');
+        
+        if (fileViewer && fileTitle && fileContent) {
+            fileTitle.textContent = data.name;
+            fileContent.textContent = data.content;
+            fileViewer.classList.add('active');
+        }
+    } catch (error) {
+        console.error('Error viewing file:', error);
+    }
+}
+
+// Helper function to format file size
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// Helper function to add system message
+function addSystemMessage(message) {
+    const chatMessages = document.getElementById('chat-messages');
+    if (!chatMessages) return;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message system-message';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.textContent = message;
+    
+    messageDiv.appendChild(messageContent);
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Helper function to add system error message
+function addSystemErrorMessage(message) {
+    const chatMessages = document.getElementById('chat-messages');
+    if (!chatMessages) return;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message system-message error';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.textContent = `Error: ${message}`;
+    
+    messageDiv.appendChild(messageContent);
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Function to send a chat message
+async function sendChatMessage(message) {
     const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-btn');
     const stopButton = document.getElementById('stop-btn');
     const chatMessages = document.getElementById('chat-messages');
+    const statusIndicator = document.getElementById('status-indicator');
     
-    if (sendButton && userInput && chatMessages) {
-        sendButton.addEventListener('click', () => {
-            const message = userInput.value.trim();
-            if (!message) return;
-            
-            // Add user message to chat
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message user-message';
-            
-            const messageHeader = document.createElement('div');
-            messageHeader.className = 'message-header';
-            messageHeader.innerHTML = '<span class="avatar">👤</span><span class="sender">You</span>';
-            
-            const messageContent = document.createElement('div');
-            messageContent.className = 'message-content';
-            messageContent.textContent = message;
-            
-            messageDiv.appendChild(messageHeader);
-            messageDiv.appendChild(messageContent);
-            
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-            // Clear input
-            userInput.value = '';
-            
-            // Disable send button and enable stop button
-            sendButton.disabled = true;
-            if (stopButton) stopButton.disabled = false;
-            
-            // Update status
-            updateStatus('Processing...');
-            
-            // Send message to server
-            fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ prompt: message }),
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                // Set session ID in URL without reloading page
-                if (data.session_id && data.session_id !== sessionId) {
-                    const url = new URL(window.location);
-                    url.searchParams.set('session_id', data.session_id);
-                    window.history.pushState({}, '', url);
-                    
-                    // Reconnect WebSocket with new session ID
-                    if (socket) {
-                        socket.close();
-                        setTimeout(connect, 500);
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error sending message:', error);
-                addSystemErrorMessage(error.message);
-                updateStatus('Error');
-                sendButton.disabled = false;
-                if (stopButton) stopButton.disabled = true;
-            });
+    // Add user message to chat
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message user-message';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.textContent = message;
+    
+    messageDiv.appendChild(messageContent);
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Clear input
+    userInput.value = '';
+    
+    // Disable send button and enable stop button
+    sendButton.disabled = true;
+    if (stopButton) stopButton.disabled = false;
+    
+    // Update status
+    if (statusIndicator) statusIndicator.textContent = 'Processing...';
+    
+    console.log('Sending message:', message);
+    
+    try {
+        // Send message to server
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ prompt: message })
         });
         
-        // Handle enter key in input field
-        userInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendButton.click();
-            }
-        });
+        console.log('Response status:', response.status);
         
-        // Handle stop button
-        if (stopButton) {
-            stopButton.addEventListener('click', () => {
-                if (!sessionId) return;
-                
-                fetch(`/api/chat/${sessionId}/stop`, {
-                    method: 'POST',
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`API error: ${response.status}`);
-                    }
-                    updateStatus('Stopped');
-                    sendButton.disabled = false;
-                    stopButton.disabled = true;
-                    addSystemMessage('Processing stopped by user');
-                })
-                .catch(error => {
-                    console.error('Error stopping processing:', error);
-                    addSystemErrorMessage(error.message);
-                });
-            });
-            
-            // Initially disable stop button
-            stopButton.disabled = true;
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
         }
+        
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        // Set session ID and reconnect WebSocket with new session ID
+        if (data.session_id) {
+            // Update URL with session ID
+            const url = new URL(window.location);
+            url.searchParams.set('session_id', data.session_id);
+            window.history.pushState({}, '', url);
+            
+            // Close existing WebSocket if it exists
+            if (window.socket && window.socket.readyState === WebSocket.OPEN) {
+                window.socket.close();
+            }
+            
+            // Connect with the new session ID
+            setTimeout(connect, 500);
+        }
+    } catch (error) {
+        console.error('Error sending message:', error);
+        addSystemErrorMessage(error.message);
+        if (statusIndicator) statusIndicator.textContent = 'Error';
+        sendButton.disabled = false;
+        if (stopButton) stopButton.disabled = true;
     }
+}
+
+// Function to stop processing
+async function stopProcessing() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
     
-    // Helper function to add system message
-    function addSystemMessage(message) {
-        const chatMessages = document.getElementById('chat-messages');
-        if (!chatMessages) return;
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message system-message';
-        
-        const messageHeader = document.createElement('div');
-        messageHeader.className = 'message-header';
-        messageHeader.innerHTML = '<span class="avatar">ℹ️</span><span class="sender">System</span>';
-        
-        const messageContent = document.createElement('div');
-        messageContent.className = 'message-content';
-        messageContent.textContent = message;
-        
-        messageDiv.appendChild(messageHeader);
-        messageDiv.appendChild(messageContent);
-        
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+    if (!sessionId) return;
     
-    // Helper function to add system error message
-    function addSystemErrorMessage(message) {
-        const chatMessages = document.getElementById('chat-messages');
-        if (!chatMessages) return;
+    try {
+        const response = await fetch(`/api/chat/${sessionId}/stop`, {
+            method: 'POST',
+        });
         
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message system-message error-message';
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
         
-        const messageHeader = document.createElement('div');
-        messageHeader.className = 'message-header';
-        messageHeader.innerHTML = '<span class="avatar">⚠️</span><span class="sender">Error</span>';
+        const statusIndicator = document.getElementById('status-indicator');
+        if (statusIndicator) statusIndicator.textContent = 'Processing stopped';
         
-        const messageContent = document.createElement('div');
-        messageContent.className = 'message-content';
-        messageContent.textContent = message;
-        
-        messageDiv.appendChild(messageHeader);
-        messageDiv.appendChild(messageContent);
-        
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        // Update UI state
+        const sendButton = document.getElementById('send-btn');
+        const stopButton = document.getElementById('stop-btn');
+        if (sendButton) sendButton.disabled = false;
+        if (stopButton) stopButton.disabled = true;
+    } catch (error) {
+        console.error('Error stopping processing:', error);
     }
 } 

@@ -4,7 +4,67 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sith Web</title>
+    <!-- Original styles and scripts -->
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <!-- Add inline script for direct handling of chat button -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Direct chat handler initialized');
+            
+            // Get chat interface elements
+            const sendButton = document.getElementById('send-btn');
+            const userInput = document.getElementById('user-input');
+            const stopButton = document.getElementById('stop-btn');
+            const chatMessages = document.getElementById('chat-messages');
+            
+            if (sendButton && userInput) {
+                // Direct click handler for send button
+                sendButton.onclick = function() {
+                    const message = userInput.value.trim();
+                    if (message) {
+                        // Add user message to UI
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = 'message user-message';
+                        const messageContent = document.createElement('div');
+                        messageContent.className = 'message-content';
+                        messageContent.textContent = message;
+                        messageDiv.appendChild(messageContent);
+                        chatMessages.appendChild(messageDiv);
+                        
+                        // Clear input and disable button
+                        userInput.value = '';
+                        sendButton.disabled = true;
+                        
+                        // Send to server
+                        fetch('/api/chat', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ prompt: message })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log('Success:', data);
+                            sendButton.disabled = false;
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            sendButton.disabled = false;
+                        });
+                    }
+                };
+                
+                // Enter key handler
+                userInput.onkeydown = function(event) {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        sendButton.click();
+                    }
+                };
+            }
+        });
+    </script>
 </head>
 <body>
     <div class="container">
@@ -177,7 +237,12 @@
         </footer>
     </div>
 
+    <!-- Load our new chat.js file first -->
+    <script src="{{ url_for('static', path='/chat.js') }}"></script>
+    
+    <!-- Load the existing script.js for other functionality -->
     <script src="{{ url_for('static', path='/script.js') }}"></script>
+    
     <script>
         // Event listeners for tabs and panels
         document.addEventListener('DOMContentLoaded', function() {

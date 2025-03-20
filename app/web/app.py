@@ -7,6 +7,7 @@ import uuid
 import webbrowser
 from pathlib import Path
 from typing import Dict, List, Optional
+from contextlib import asynccontextmanager
 
 from fastapi import (
     BackgroundTasks,
@@ -17,7 +18,7 @@ from fastapi import (
     WebSocketDisconnect,
     Depends,
 )
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -29,20 +30,40 @@ from app.web.log_handler import capture_session_logs, get_logs
 from app.web.log_parser import get_all_logs_info, get_latest_log_info, parse_log_file
 from app.web.thinking_tracker import ThinkingTracker
 from app.web.terminal_api import terminal_router
-
+from app.web.routes.memory import router as memory_router
 
 # Control whether to automatically open browser (read from environment variable, default is True)
 AUTO_OPEN_BROWSER = os.environ.get("AUTO_OPEN_BROWSER", "1") == "1"
 last_opened = False  # Track if browser has been opened
 
-app = FastAPI(title="Sith Web")
-
-# Register terminal API blueprint
-app.include_router(terminal_router)
-
-# Get current file directory
+# Get current directory
 current_dir = Path(__file__).parent
-# Set static files directory
+
+# Define FastAPI lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan events for the application"""
+    # Startup event
+    global last_opened
+    if AUTO_OPEN_BROWSER and not last_opened:
+        # Delay 1 second to ensure service has started
+        threading.Timer(1.0, lambda: webbrowser.open("http://localhost:8000")).start()
+        print("🌐 Automatically opening browser...")
+        last_opened = True
+    
+    yield  # This is where the application runs
+    
+    # Shutdown event - add any cleanup code here if needed
+    pass
+
+# Create app with lifespan
+app = FastAPI(title="Sith Web", lifespan=lifespan)
+
+# Register memory API router
+from app.web.routes.memory import router as memory_router
+app.include_router(memory_router)
+
+# Mount static files directory
 app.mount("/static", StaticFiles(directory=current_dir / "static"), name="static")
 # Set templates directory
 templates = Jinja2Templates(directory=current_dir / "templates")
@@ -82,45 +103,29 @@ def create_workspace(session_id: str) -> Path:
     return workspace_dir
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Startup event: Automatically open browser when application starts"""
-    global last_opened
-    if AUTO_OPEN_BROWSER and not last_opened:
-        # Delay 1 second to ensure service has started
-        threading.Timer(1.0, lambda: webbrowser.open("http://localhost:8000")).start()
-        print("🌐 Automatically opening browser...")
-        last_opened = True
-
-
+# Request models
 class SessionRequest(BaseModel):
     prompt: str
 
 
 @app.get("/", response_class=HTMLResponse)
-async def get_home(request: Request):
-    """Home page entry - using connected interface"""
-    return HTMLResponse(
-        content=open(
-            current_dir / "static" / "connected_interface.html", encoding="utf-8"
-        ).read()
-    )
-
-
-@app.get("/original", response_class=HTMLResponse)
-async def get_original_interface(request: Request):
-    """Original interface entry"""
+async def get_index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.get("/connected", response_class=HTMLResponse)
-async def get_connected_interface(request: Request):
-    """Connected backend new interface entry (same as home page)"""
-    return HTMLResponse(
-        content=open(
-            current_dir / "static" / "connected_interface.html", encoding="utf-8"
-        ).read()
-    )
+@app.get("/combo", response_class=HTMLResponse)
+async def get_combo_page(request: Request):
+    """Combined page with chat and memory functionality"""
+    return templates.TemplateResponse("index_with_memory.html", {"request": request})
+
+
+@app.get("/memory", response_class=HTMLResponse)
+async def get_memory_page():
+    # Read the HTML file
+    current_dir = Path(__file__).parent
+    with open(current_dir / "static" / "memory_interface.html", encoding="utf-8") as f:
+        content = f.read()
+    return HTMLResponse(content=content)
 
 
 @app.post("/api/chat")
@@ -819,11 +824,19 @@ class MemoryAddRequest(BaseModel):
 
 
 # Function to get memory agent from app state
-async def get_memory_agent(request: Request):
-    """Get memory agent from app state"""
-    if not hasattr(request.app.state, "memory_agent"):
-        raise HTTPException(status_code=503, detail="Memory agent not available")
-    return request.app.state.memory_agent
+async def get_memory_agent():
+    """Get or create the memory agent.
+    
+    This function is used as a FastAPI dependency to provide the memory agent
+    to routes that need it.
+    """
+    if not hasattr(app.state, "memory_agent"):
+        from app.agent.memory import MemoryAgent
+        app.state.memory_agent = MemoryAgent(
+            index_name="openmanus_memory",
+            host="http://localhost:8882"
+        )
+    return app.state.memory_agent
 
 
 # Add API endpoints for memory queries

@@ -61,6 +61,50 @@ class MemoryTool(BaseTool):
             self.logger.error(f"Failed to get memory agent: {e}")
             raise HTTPException(status_code=503, detail="Memory agent not available")
     
+    async def execute(self, **kwargs) -> Dict[str, Any]:
+        """Execute the memory tool with the given parameters.
+        
+        This method implements the abstract method from BaseTool.
+        It determines which operation to perform based on the parameters.
+        
+        Args:
+            action: The action to perform, either "search" or "store"
+            query: The search query (for search action)
+            content: The content to store (for store action)
+            source: The source of the memory (for store action)
+            metadata: Additional metadata (for store action)
+            limit: Maximum number of results to return (for search action)
+            
+        Returns:
+            Results of the operation
+        """
+        # Determine which action to perform
+        action = kwargs.get("action", "search")
+        
+        if action == "search":
+            # Handle search operation
+            search_input = MemorySearchInput(
+                query=kwargs.get("query", ""),
+                limit=kwargs.get("limit", 5)
+            )
+            return await self.search(search_input)
+        
+        elif action == "store":
+            # Handle store operation
+            store_input = MemoryStoreInput(
+                content=kwargs.get("content", ""),
+                source=kwargs.get("source", "agent"),
+                metadata=kwargs.get("metadata")
+            )
+            return await self.store(store_input)
+        
+        else:
+            # Invalid action
+            return {
+                "error": f"Unknown action: {action}",
+                "valid_actions": ["search", "store"]
+            }
+    
     async def search(self, input_data: MemorySearchInput) -> Dict[str, Any]:
         """Search for information in memory.
         

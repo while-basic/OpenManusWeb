@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .left-panel {
+            flex: 1;
+        }
+        .right-panel {
+            flex: 2;
+        }
+        .memory-form {
+            background-color: #f5f5f5;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .memory-input {
+            width: 100%;
+            min-height: 100px;
+            margin-bottom: 10px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .metadata-input {
+            width: 100%;
+            height: 60px;
+            margin-bottom: 10px;
+            padding: 10px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+        .source-input {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .search-container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .search-input {
+            width: 70%;
+            padding: 10px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        .search-button {
+            padding: 10px 15px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .search-button:hover {
+            background-color: #007B9A;
+        }
+        .memories-container {
+            background-color: #ffffff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .memory-item {
+            background-color: #f9f9f9;
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 5px solid #4CAF50;
+        }
+        .memory-content {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+        .memory-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #777;
+        }
+        .memory-timestamp {
+            font-style: italic;
+        }
+        .delete-button {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 3px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .delete-button:hover {
+            background-color: #d32f2f;
+        }
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: none;
+        }
+        .status-message.success {
+            background-color: #dff0d8;
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
+        }
+        .status-message.error {
+            background-color: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
+        }
+        .status-message.loading {
+            background-color: #d9edf7;
+            color: #31708f;
+            border: 1px solid #bce8f1;
+        }
+        .debug-console {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Memory Interface</h1>
+    
+    <div class="status-message" id="status-message"></div>
+    <div class="debug-console" id="debug-console"></div>
+    
+    <div class="container">
+        <div class="left-panel">
+            <div class="memory-form">
+                <h2>Add Memory</h2>
+                <textarea class="memory-input" id="memory-input" placeholder="Enter memory content..."></textarea>
+                <input type="text" class="source-input" id="source-input" placeholder="Enter source (default: web_interface)" value="web_interface">
+                <textarea class="metadata-input" id="metadata-input" placeholder="Enter metadata as JSON...">{&quot;importance&quot;: 5}</textarea>
+                <button class="button" id="add-memory-button">Add Memory</button>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <div class="search-container">
+                <h2>Search Memories</h2>
+                <input type="text" class="search-input" id="search-input" placeholder="Search query...">
+                <button class="search-button" id="search-button">Search</button>
+                <button class="search-button" id="list-all-button">List All</button>
+            </div>
+            
+            <div class="memories-container" id="memories-container">
+                <p>Memories will be displayed here.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Debug logging
+        const debugMode = true;
+        const debugConsole = document.getElementById('debug-console');
+        
+        function debugLog(message, data = null) {
+            if (!debugMode) return;
+            
+            const timestamp = new Date().toISOString();
+            let logMessage = `[${timestamp}] ${message}`;
+            
+            if (data) {
+                if (typeof data === 'object') {
+                    try {
+                        logMessage += `: ${JSON.stringify(data, null, 2)}`;
+                    } catch (e) {
+                        logMessage += `: [Object could not be stringified]`;
+                    }
+                } else {
+                    logMessage += `: ${data}`;
+                }
+            }
+            
+            debugConsole.style.display = 'block';
+            const logEntry = document.createElement('div');
+            logEntry.textContent = logMessage;
+            debugConsole.appendChild(logEntry);
+            debugConsole.scrollTop = debugConsole.scrollHeight;
+            
+            // Also log to browser console
+            console.log(logMessage);
+        }
+        
+        // Show status messages
+        function showStatus(message, type) {
+            const statusElement = document.getElementById('status-message');
+            statusElement.textContent = message;
+            statusElement.className = 'status-message ' + type;
+            statusElement.style.display = 'block';
+            
+            // Log to debug console
+            debugLog(`Status message (${type}): ${message}`);
+            
+            // Auto-hide success and error messages after 5 seconds
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    statusElement.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Add memory
+        async function addMemory() {
+            const contentElement = document.getElementById('memory-input');
+            const sourceElement = document.getElementById('source-input');
+            const metadataElement = document.getElementById('metadata-input');
+            
+            const content = contentElement.value.trim();
+            const source = sourceElement.value.trim() || 'web_interface';
+            let metadata = {};
+            
+            if (!content) {
+                showStatus('Memory content cannot be empty', 'error');
+                return;
+            }
+            
+            try {
+                metadata = JSON.parse(metadataElement.value.trim() || '{}');
+                debugLog('Parsed metadata', metadata);
+            } catch (error) {
+                showStatus(`Invalid metadata JSON: ${error.message}`, 'error');
+                debugLog('Error parsing metadata', error);
+                return;
+            }
+            
+            showStatus('Adding memory...', 'loading');
+            debugLog('Sending memory add request', { content, source, metadata });
+            
+            try {
+                const response = await fetch('/api/memory/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ content, source, metadata }),
+                });
+                
+                debugLog('Received response', { 
+                    status: response.status, 
+                    statusText: response.statusText 
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to add memory');
+                }
+                
+                const data = await response.json();
+                debugLog('Memory added successfully', data);
+                
+                showStatus('Memory added successfully!', 'success');
+                
+                // Clear form
+                contentElement.value = '';
+                metadataElement.value = '{"importance": 5}';
+                
+                // Refresh memories list
+                listAllMemories();
+                
+            } catch (error) {
+                debugLog('Error adding memory', error);
+                showStatus(`Error adding memory: ${error.message}`, 'error');
+            }
+        }
+        
+        // Search memories
+        async function searchMemories(query) {
+            showStatus('Searching memories...', 'loading');
+            debugLog('Searching memories', { query });
+            
+            try {
+                const response = await fetch('/api/memory/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query, limit: 50 }),
+                });
+                
+                debugLog('Received search response', { 
+                    status: response.status, 
+                    statusText: response.statusText 
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to search memories');
+                }
+                
+                const memories = await response.json();
+                debugLog('Memories search results', { count: memories.length });
+                
+                displayMemories(memories);
+                showStatus(`Found ${memories.length} memories`, 'success');
+                
+            } catch (error) {
+                debugLog('Error searching memories', error);
+                showStatus(`Error searching memories: ${error.message}`, 'error');
+            }
+        }
+        
+        // List all memories
+        async function listAllMemories() {
+            showStatus('Loading memories...', 'loading');
+            debugLog('Listing all memories');
+            
+            try {
+                const response = await fetch('/api/memory/');
+                
+                debugLog('Received list response', { 
+                    status: response.status, 
+                    statusText: response.statusText 
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to list memories');
+                }
+                
+                const memories = await response.json();
+                debugLog('Memories list results', { count: memories.length });
+                
+                displayMemories(memories);
+                showStatus(`Loaded ${memories.length} memories`, 'success');
+                
+            } catch (error) {
+                debugLog('Error listing memories', error);
+                showStatus(`Error listing memories: ${error.message}`, 'error');
+            }
+        }
+        
+        // Delete memory
+        async function deleteMemory(id) {
+            if (!confirm('Are you sure you want to delete this memory?')) {
+                return;
+            }
+            
+            debugLog('Deleting memory', { id });
+            
+            try {
+                const response = await fetch(`/api/memory/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                debugLog('Received delete response', { 
+                    status: response.status, 
+                    statusText: response.statusText 
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Failed to delete memory');
+                }
+                
+                const result = await response.json();
+                debugLog('Memory deleted successfully', result);
+                
+                showStatus('Memory deleted successfully!', 'success');
+                
+                // Refresh memories list
+                listAllMemories();
+                
+            } catch (error) {
+                debugLog('Error deleting memory', error);
+                showStatus(`Error deleting memory: ${error.message}`, 'error');
+            }
+        }
+        
+        // Display memories in the container
+        function displayMemories(memories) {
+            const container = document.getElementById('memories-container');
+            
+            if (!memories || memories.length === 0) {
+                container.innerHTML = '<p>No memories found.</p>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            debugLog('Displaying memories', { count: memories.length });
+            
+            memories.forEach(memory => {
+                const memoryElement = document.createElement('div');
+                memoryElement.className = 'memory-item';
+                
+                const contentElement = document.createElement('div');
+                contentElement.className = 'memory-content';
+                contentElement.textContent = memory.content;
+                
+                const metaElement = document.createElement('div');
+                metaElement.className = 'memory-meta';
+                
+                const sourceElement = document.createElement('span');
+                sourceElement.textContent = `Source: ${memory.source}`;
+                
+                const timestampElement = document.createElement('span');
+                timestampElement.className = 'memory-timestamp';
+                timestampElement.textContent = memory.timestamp;
+                
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-button';
+                deleteButton.textContent = 'Delete';
+                deleteButton.onclick = () => deleteMemory(memory.id);
+                
+                metaElement.appendChild(sourceElement);
+                metaElement.appendChild(timestampElement);
+                metaElement.appendChild(deleteButton);
+                
+                const metadataElement = document.createElement('div');
+                metadataElement.style.fontSize = '12px';
+                metadataElement.style.marginTop = '5px';
+                metadataElement.textContent = `Metadata: ${JSON.stringify(memory.metadata)}`;
+                
+                memoryElement.appendChild(contentElement);
+                memoryElement.appendChild(metaElement);
+                memoryElement.appendChild(metadataElement);
+                
+                container.appendChild(memoryElement);
+            });
+        }
+        
+        // Initialize event listeners when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('DOM loaded, setting up event listeners');
+            
+            // Add Memory button
+            const addMemoryButton = document.getElementById('add-memory-button');
+            if (addMemoryButton) {
+                debugLog('Add Memory button found, adding event listener');
+                addMemoryButton.addEventListener('click', function(event) {
+                    debugLog('Add Memory button clicked');
+                    addMemory();
+                });
+            } else {
+                debugLog('ERROR: Add Memory button not found');
+            }
+            
+            // Search button
+            const searchButton = document.getElementById('search-button');
+            if (searchButton) {
+                debugLog('Search button found, adding event listener');
+                searchButton.addEventListener('click', function() {
+                    const query = document.getElementById('search-input').value.trim();
+                    debugLog('Search button clicked', { query });
+                    
+                    if (query) {
+                        searchMemories(query);
+                    } else {
+                        showStatus('Please enter a search query', 'error');
+                    }
+                });
+            } else {
+                debugLog('ERROR: Search button not found');
+            }
+            
+            // Search input (Enter key)
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) {
+                debugLog('Search input found, adding event listener');
+                searchInput.addEventListener('keyup', function(event) {
+                    if (event.key === 'Enter') {
+                        const query = searchInput.value.trim();
+                        debugLog('Enter key pressed in search input', { query });
+                        
+                        if (query) {
+                            searchMemories(query);
+                        } else {
+                            showStatus('Please enter a search query', 'error');
+                        }
+                    }
+                });
+            } else {
+                debugLog('ERROR: Search input not found');
+            }
+            
+            // List All button
+            const listAllButton = document.getElementById('list-all-button');
+            if (listAllButton) {
+                debugLog('List All button found, adding event listener');
+                listAllButton.addEventListener('click', function() {
+                    debugLog('List All button clicked');
+                    listAllMemories();
+                });
+            } else {
+                debugLog('ERROR: List All button not found');
+            }
+            
+            // Load memories on page load
+            debugLog('Loading initial memories list');
+            listAllMemories();
+        });
+
+        // Show debug console on page load if in debug mode
+        if (debugMode) {
+            document.getElementById('debug-console').style.display = 'block';
+            debugLog('Debug mode enabled');
+        }
+    </script>
+</body>
+</html> 
