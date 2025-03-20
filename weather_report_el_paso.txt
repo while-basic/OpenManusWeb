@@ -1,0 +1,8 @@
+Weather Report for El Paso, TX (79924 zip code):
+
+Current Temperature: Around 70°F
+Precipitation Chance: 20-30%
+Wind Speed: 10-15 mph
+Sky Conditions: Partly Cloudy
+
+Overall, the weather in El Paso today is mild with a moderate chance of rain.

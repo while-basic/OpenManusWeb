@@ -6,6 +6,148 @@
     <title>Sith Web</title>
     <!-- Original styles and scripts -->
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <!-- Add Memory Module Styles -->
+    <style>
+        /* Memory Interface Styles */
+        .memory-container {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .memory-form {
+            background-color: #f5f5f5;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        
+        .memory-input, .metadata-input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .memory-input {
+            min-height: 100px;
+        }
+        
+        .metadata-input {
+            height: 60px;
+            font-family: monospace;
+        }
+        
+        .source-input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .memories-list {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        .memory-item {
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #4CAF50;
+        }
+        
+        .memory-content {
+            margin-bottom: 5px;
+        }
+        
+        .memory-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #777;
+        }
+        
+        .memory-timestamp {
+            font-style: italic;
+        }
+        
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .status-message.success {
+            background-color: #dff0d8;
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
+        }
+        
+        .status-message.error {
+            background-color: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
+        }
+        
+        .status-message.loading {
+            background-color: #d9edf7;
+            color: #31708f;
+            border: 1px solid #bce8f1;
+        }
+        
+        .memory-tab-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .memory-tab {
+            padding: 8px 15px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .memory-tab.active {
+            background-color: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+        
+        .memory-panel {
+            display: none;
+        }
+        
+        .memory-panel.active {
+            display: block;
+        }
+    </style>
     <!-- Add inline script for direct handling of chat button -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -69,7 +211,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>Sith 🙋</h1>
+            <h1>Sith🗡️</h1>
             <p class="subtitle">AI Assistant - Web Version</p>
         </header>
 
@@ -205,6 +347,40 @@
                 </div>
             </div>
 
+            <!-- Memory Module -->
+            <div class="memory-container">
+                <h2>Memory Module</h2>
+                <div id="memory-status-message" class="status-message"></div>
+
+                <div class="memory-tab-container">
+                    <div class="memory-tab active" data-target="add-panel">Add Memory</div>
+                    <div class="memory-tab" data-target="search-panel">Search Memories</div>
+                </div>
+
+                <!-- Add Memory Panel -->
+                <div id="add-panel" class="memory-panel active">
+                    <div class="memory-form">
+                        <textarea class="memory-input" id="memory-input" placeholder="Enter memory content..."></textarea>
+                        <input type="text" class="source-input" id="source-input" placeholder="Enter source (default: web_interface)" value="web_interface">
+                        <textarea class="metadata-input" id="metadata-input" placeholder="Enter metadata as JSON...">{&quot;importance&quot;: 5}</textarea>
+                        <button id="add-memory-button" class="primary-btn">Add Memory</button>
+                    </div>
+                </div>
+
+                <!-- Search Memory Panel -->
+                <div id="search-panel" class="memory-panel">
+                    <div class="search-container">
+                        <input type="text" class="search-input" id="search-input" placeholder="Search query...">
+                        <button id="search-button" class="primary-btn">Search</button>
+                        <button id="list-all-button" class="secondary-btn">List All</button>
+                    </div>
+                    
+                    <div class="memories-list" id="memories-container">
+                        <p>Memories will be displayed here.</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Generated Files Section -->
             <div id="generated-files" class="generated-files-section">
                 <div class="section-header">
@@ -227,7 +403,7 @@
         </main>
 
         <footer>
-            <p>Powered by OpenManus - <a href="https://github.com/mannaandpoem/OpenManus" target="_blank">GitHub</a></p>
+            <p>Powered by Sith - <a href="https://github.com/mannaandpoem/OpenManus" target="_blank">GitHub</a></p>
             <div class="language-selector-container">
                 <select id="language-selector">
                     <option value="en">English</option>
@@ -243,6 +419,222 @@
     <!-- Load the existing script.js for other functionality -->
     <script src="{{ url_for('static', path='/script.js') }}"></script>
     
+    <!-- Memory Module JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Memory interface elements
+            const memoryStatusMessage = document.getElementById('memory-status-message');
+            const memoryInput = document.getElementById('memory-input');
+            const sourceInput = document.getElementById('source-input');
+            const metadataInput = document.getElementById('metadata-input');
+            const addMemoryButton = document.getElementById('add-memory-button');
+            const searchInput = document.getElementById('search-input');
+            const searchButton = document.getElementById('search-button');
+            const listAllButton = document.getElementById('list-all-button');
+            const memoriesContainer = document.getElementById('memories-container');
+            const memoryTabs = document.querySelectorAll('.memory-tab');
+            
+            // Show status messages
+            function showStatus(message, type) {
+                memoryStatusMessage.textContent = message;
+                memoryStatusMessage.className = 'status-message ' + type;
+                memoryStatusMessage.style.display = 'block';
+                
+                // Auto-hide success and error messages after 5 seconds
+                if (type === 'success' || type === 'error') {
+                    setTimeout(() => {
+                        memoryStatusMessage.style.display = 'none';
+                    }, 5000);
+                }
+            }
+            
+            // Add memory
+            async function addMemory() {
+                const content = memoryInput.value.trim();
+                const source = sourceInput.value.trim() || 'web_interface';
+                let metadata = {};
+                
+                try {
+                    metadata = JSON.parse(metadataInput.value.trim() || '{}');
+                } catch (e) {
+                    showStatus('Invalid JSON in metadata field', 'error');
+                    return;
+                }
+                
+                if (!content) {
+                    showStatus('Please enter memory content', 'error');
+                    return;
+                }
+                
+                showStatus('Adding memory...', 'loading');
+                
+                try {
+                    const response = await fetch('/api/memory/add', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            content: content,
+                            source: source,
+                            metadata: metadata
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        showStatus('Memory added successfully!', 'success');
+                        memoryInput.value = '';
+                        metadataInput.value = '{\"importance\": 5}';
+                    } else {
+                        showStatus(`Error: ${data.error || 'Unknown error'}`, 'error');
+                    }
+                } catch (e) {
+                    showStatus(`Error: ${e.message}`, 'error');
+                }
+            }
+            
+            // Search memories
+            async function searchMemories(query = '') {
+                showStatus('Searching memories...', 'loading');
+                
+                try {
+                    let url = '/api/memory/query';
+                    let body = {
+                        query: query || 'Show recent memories',
+                        limit: 20
+                    };
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(body)
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok && data.results) {
+                        showStatus('', ''); // Clear status message
+                        displayMemories(data.results);
+                    } else {
+                        showStatus(`Error: ${data.error || 'Unknown error'}`, 'error');
+                    }
+                } catch (e) {
+                    showStatus(`Error: ${e.message}`, 'error');
+                }
+            }
+            
+            // Display memories in the container
+            function displayMemories(memories) {
+                memoriesContainer.innerHTML = '';
+                
+                if (!memories || memories.length === 0) {
+                    memoriesContainer.innerHTML = '<p>No memories found.</p>';
+                    return;
+                }
+                
+                memories.forEach(memory => {
+                    const memoryItem = document.createElement('div');
+                    memoryItem.className = 'memory-item';
+                    
+                    const content = document.createElement('div');
+                    content.className = 'memory-content';
+                    content.textContent = memory.content || 'No content';
+                    
+                    const meta = document.createElement('div');
+                    meta.className = 'memory-meta';
+                    
+                    const source = document.createElement('span');
+                    source.className = 'memory-source';
+                    source.textContent = `Source: ${memory.source || 'unknown'}`;
+                    
+                    const timestamp = document.createElement('span');
+                    timestamp.className = 'memory-timestamp';
+                    
+                    // Format timestamp if available
+                    let time = 'unknown time';
+                    if (memory.metadata && memory.metadata.timestamp) {
+                        const date = new Date(memory.metadata.timestamp * 1000);
+                        time = date.toLocaleString();
+                    }
+                    timestamp.textContent = time;
+                    
+                    meta.appendChild(source);
+                    meta.appendChild(timestamp);
+                    
+                    memoryItem.appendChild(content);
+                    memoryItem.appendChild(meta);
+                    
+                    memoriesContainer.appendChild(memoryItem);
+                });
+            }
+            
+            // Tab switching
+            memoryTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const target = tab.getAttribute('data-target');
+                    
+                    // Remove active class from all tabs and panels
+                    memoryTabs.forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.memory-panel').forEach(p => p.classList.remove('active'));
+                    
+                    // Add active class to current tab and panel
+                    tab.classList.add('active');
+                    document.getElementById(target).classList.add('active');
+                });
+            });
+            
+            // Event listeners
+            if (addMemoryButton) {
+                addMemoryButton.addEventListener('click', addMemory);
+            }
+            
+            if (searchButton) {
+                searchButton.addEventListener('click', () => {
+                    searchMemories(searchInput.value.trim());
+                });
+            }
+            
+            if (listAllButton) {
+                listAllButton.addEventListener('click', () => {
+                    searchInput.value = '';
+                    searchMemories('');
+                });
+            }
+            
+            if (searchInput) {
+                searchInput.addEventListener('keydown', event => {
+                    if (event.key === 'Enter') {
+                        searchMemories(searchInput.value.trim());
+                    }
+                });
+            }
+            
+            // Check memory service status on load
+            async function checkMemoryStatus() {
+                try {
+                    const response = await fetch('/api/memory/status');
+                    const data = await response.json();
+                    
+                    if (data.status === 'available') {
+                        console.log('Memory service is available');
+                    } else {
+                        showStatus(`Memory service unavailable: ${data.error || 'unknown reason'}`, 'error');
+                    }
+                } catch (e) {
+                    console.error('Error checking memory status:', e);
+                    showStatus('Memory service connection failed', 'error');
+                }
+            }
+            
+            // Initialize
+            checkMemoryStatus();
+        });
+    </script>
+
     <script>
         // Event listeners for tabs and panels
         document.addEventListener('DOMContentLoaded', function() {

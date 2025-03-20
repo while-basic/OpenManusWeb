@@ -14,6 +14,20 @@ class LLMMonitor:
     def __init__(self):
         self.interceptors = []
         self.communications = []
+        
+    @classmethod
+    def create_for_session(cls, session_id, agent):
+        """Factory method to create a monitor for a specific session and agent"""
+        monitor = cls()
+        monitor.session_id = session_id
+        monitor.agent = agent
+        
+        # If agent is provided, set up communication interception
+        if agent is not None and hasattr(agent, "llm") and hasattr(agent.llm, "completion"):
+            monitor.intercept_method(agent.llm, "completion")
+            print(f"LLM communication monitoring set up for session {session_id}")
+        
+        return monitor
 
     def register_interceptor(self, func: Callable):
         """Register an interceptor function that will be called on each communication"""

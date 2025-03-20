@@ -22,6 +22,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from loguru import logger
 
 from app.agent.sith import Sith
 from app.flow.base import FlowType
@@ -31,6 +32,9 @@ from app.web.log_parser import get_all_logs_info, get_latest_log_info, parse_log
 from app.web.thinking_tracker import ThinkingTracker
 from app.web.terminal_api import terminal_router
 from app.web.routes.memory import router as memory_router
+
+# Add a global cache to track memory operations
+request_cache = {}
 
 # Control whether to automatically open browser (read from environment variable, default is True)
 AUTO_OPEN_BROWSER = os.environ.get("AUTO_OPEN_BROWSER", "1") == "1"
@@ -233,12 +237,26 @@ async def broadcast_terminal_update(session_id, command_id, data):
             except Exception as e:
                 print(f"Error sending terminal update: {e}")
 
+# New function to broadcast system logs to connected clients
+async def broadcast_system_logs(session_id, logs):
+    """Send system logs via WebSocket to all connected clients for a session"""
+    if session_id in websocket_connections:
+        message = {
+            'type': 'system_logs',
+            'logs': logs
+        }
+        
+        for client in websocket_connections[session_id]:
+            try:
+                await client.send_text(json.dumps(message))
+            except Exception as e:
+                print(f"Error sending system logs: {e}")
 
 # Add LLM communication hook
 from app.web.thinking_tracker import ThinkingTracker
 
 
-# Modify communication tracker implementation
+# Wrapper class for LLM communications
 class LLMCommunicationTracker:
     """Track communications with the LLM, using monkey patching instead of callbacks"""
 
@@ -473,6 +491,19 @@ async def get_file_content(file_path: str):
 
 # Modify process_prompt function, handle workspace
 async def process_prompt(session_id: str, prompt: str):
+    """Process a user prompt, handling the entire workflow from prompt to result."""
+    # Create a unique request ID to prevent duplicates
+    request_id = f"{session_id}:{prompt[:20]}"
+    
+    # Check if we've already processed this exact request
+    global request_cache
+    if request_id in request_cache:
+        logger.warning(f"Duplicate request detected: {request_id}")
+        return
+    
+    # Mark this request as being processed
+    request_cache[request_id] = {"status": "processing", "timestamp": time.time()}
+    
     # Get session workspace
     workspace_path = None
     if session_id in active_sessions and active_sessions[session_id].get("workspace"):
@@ -480,298 +511,343 @@ async def process_prompt(session_id: str, prompt: str):
         workspace_path = WORKSPACE_ROOT / workspace_name
 
     # Start log capture for this session
-    log_capture = capture_session_logs(session_id)
-
-    # Set up thinking tracker
-    thinking_tracker = ThinkingTracker(session_id)
-
-    # Setup result
-    result = None
-    has_error = False
-
-    try:
-        # Set up log file monitoring
-        from app.web.log_handler import LogFileHandler
-        log_handler = LogFileHandler(session_id)
-
-        # Create Sith agent
-        agent = Sith()
-        
-        # Store user query in memory if available
-        memory_agent = getattr(app.state, "memory_agent", None)
-        if memory_agent:
-            try:
-                memory_agent.add_memory({
-                    "content": prompt,
-                    "source": "user_query",
-                    "metadata": {
-                        "session_id": session_id,
-                        "timestamp": time.time(),
-                    }
-                })
-                logger.info(f"Stored user query in memory: {prompt[:50]}...")
-            except Exception as e:
-                logger.error(f"Failed to store user query in memory: {e}")
-
-        # Setup communication hooks
-        from app.web.llm_monitor import LLMMonitor
-        llm_monitor = LLMMonitor(session_id, agent)
-        
-        # Use workspace name as log file name prefix
-        job_id = workspace_path.name
-        # Set log file path
-        task_log_path = LOGS_DIR / f"{job_id}.log"
-
-        # Create log monitor and start monitoring
-        log_monitor = LogFileMonitor(job_id)
-        observer = log_monitor.start_monitoring()
-        active_log_monitors[session_id] = log_monitor
-
-        async def sync_logs():
-            """Periodically get logs from LogFileMonitor and update to ThinkingTracker in real time"""
-            last_count = 0
-            try:
-                while True:
-                    if session_id not in active_log_monitors:
-                        break
-                    current_logs = active_log_monitors[session_id].get_log_entries()
-                    if len(current_logs) > last_count:
-                        # Process new log entries
-                        new_logs = current_logs[last_count:]
-                        # Process each new log entry immediately, ensure real-time
-                        for log_entry in new_logs:
-                            # Process each log entry individually, immediately add to ThinkingTracker
-                            ThinkingTracker.add_log_entry(
-                                session_id,
-                                {
-                                    "level": log_entry.get("level", "INFO"),
-                                    "message": log_entry.get("message", ""),
-                                    "timestamp": log_entry.get("timestamp", time.time()),
-                                },
-                            )
-                        last_count = len(current_logs)
-                    # Reduce polling interval, improve real-time
-                    await asyncio.sleep(0.1)  # Check every 0.1 seconds
-            except Exception as e:
-                print(f"Error synchronizing logs: {str(e)}")
-
-        # Start log synchronization task
-        sync_task = asyncio.create_task(sync_logs())
-
-        # Set environment variable to inform logger to use this log file, ensure both ways are set
-        os.environ["SITH_LOG_FILE"] = str(task_log_path)
-        os.environ["SITH_TASK_ID"] = job_id
-
-        # Initialize thinking tracking
+    with capture_session_logs(session_id) as log_capture:
+        # Set up thinking tracker
         ThinkingTracker.start_tracking(session_id)
-        ThinkingTracker.add_thinking_step(session_id, "Start processing user request")
-        ThinkingTracker.add_thinking_step(
-            session_id, f"Workspace directory: {workspace_path.name}"
-        )
 
-        # Directly record user input prompt
-        ThinkingTracker.add_communication(session_id, "User input", prompt)
+        # Setup result
+        result = None
+        has_error = False
+        sync_task = None
 
-        # Initialize agent and task flow
-        ThinkingTracker.add_thinking_step(session_id, "Initialize AI agent and task flow")
+        try:
+            # Set up log file monitoring
+            log_handler = SimpleLogHandler(session_id)
 
-        # Use wrapper to wrap LLM
-        if hasattr(agent, "llm"):
-            original_llm = agent.llm
-            wrapped_llm = LLMCallbackWrapper(original_llm)
+            # Create Sith agent
+            agent = Sith()
+            
+            # Store user query in memory if available, with duplicate prevention
+            memory_agent = getattr(app.state, "memory_agent", None)
+            if memory_agent:
+                try:
+                    # Simple cache check
+                    memory_key = f"memory:{session_id}:{prompt[:30]}"
+                    if memory_key not in request_cache:
+                        request_cache[memory_key] = True
+                        memory_agent.add_memory({
+                            "content": prompt,
+                            "source": "user_query",
+                            "metadata": {
+                                "session_id": session_id,
+                                "timestamp": time.time(),
+                            }
+                        })
+                        logger.info(f"Stored user query in memory: {prompt[:50]}...")
+                    else:
+                        logger.warning(f"Skipping duplicate memory addition: {memory_key}")
+                except Exception as e:
+                    logger.error(f"Failed to store user query in memory: {e}")
 
-            # Register callback functions
-            def on_before_request(data):
-                # Extract request content
-                prompt_content = None
-                if data.get("args") and len(data["args"]) > 0:
-                    prompt_content = str(data["args"][0])
-                elif data.get("kwargs") and "prompt" in data["kwargs"]:
-                    prompt_content = data["kwargs"]["prompt"]
-                else:
-                    prompt_content = str(data)
+            # Setup communication hooks
+            from app.web.llm_monitor import LLMMonitor
+            llm_monitor = LLMMonitor()
+            
+            # Use workspace name as log file name prefix
+            job_id = workspace_path.name
+            # Set log file path
+            task_log_path = LOGS_DIR / f"{job_id}.log"
 
-                # Record communication content
-                print(f"Sent to LLM: {prompt_content[:100]}...")
-                ThinkingTracker.add_communication(
-                    session_id, "Sent to LLM", prompt_content
-                )
+            # Create log monitor and start monitoring
+            log_monitor = LogFileMonitor(job_id)
+            observer = log_monitor.start_monitoring()
+            active_log_monitors[session_id] = log_monitor
 
-            def on_after_request(data):
-                # Extract response content
-                response = data.get("response", "")
-                response_content = ""
+            async def sync_logs():
+                """Periodically get logs from LogFileMonitor and update to ThinkingTracker in real time"""
+                last_count = 0
+                try:
+                    while True:
+                        if session_id not in active_log_monitors:
+                            break
+                        current_logs = active_log_monitors[session_id].get_log_entries()
+                        if len(current_logs) > last_count:
+                            # Process new log entries
+                            new_logs = current_logs[last_count:]
+                            # Process each new log entry immediately, ensure real-time
+                            for log_entry in new_logs:
+                                # Process each log entry individually, immediately add to ThinkingTracker
+                                ThinkingTracker.add_log_entry(
+                                    session_id,
+                                    {
+                                        "level": log_entry.get("level", "INFO"),
+                                        "message": log_entry.get("message", ""),
+                                        "timestamp": log_entry.get("timestamp", time.time()),
+                                    },
+                                )
+                            
+                            # Also send the new logs via WebSocket
+                            log_texts = [f"{entry.get('timestamp', '')} | {entry.get('level', 'INFO')} | {entry.get('message', '')}" 
+                                        for entry in new_logs]
+                            await broadcast_system_logs(session_id, log_texts)
+                            
+                            last_count = len(current_logs)
+                        # Reduce polling interval, improve real-time
+                        await asyncio.sleep(0.1)  # Check every 0.1 seconds
+                except Exception as e:
+                    print(f"Error synchronizing logs: {str(e)}")
 
-                # Try to extract text content from different formats
-                if isinstance(response, str):
-                    response_content = response
-                elif isinstance(response, dict):
-                    if "content" in response:
-                        response_content = response["content"]
-                    elif "text" in response:
-                        response_content = response["text"]
+            # Start log synchronization task
+            sync_task = asyncio.create_task(sync_logs())
+
+            # Set environment variable to inform logger to use this log file, ensure both ways are set
+            os.environ["SITH_LOG_FILE"] = str(task_log_path)
+            os.environ["SITH_TASK_ID"] = job_id
+
+            # Initialize thinking tracking
+            ThinkingTracker.add_thinking_step(session_id, "Start processing user request")
+            ThinkingTracker.add_thinking_step(
+                session_id, f"Workspace directory: {workspace_path.name}"
+            )
+
+            # Directly record user input prompt
+            ThinkingTracker.add_communication(session_id, "User input", prompt)
+
+            # Initialize agent and task flow
+            ThinkingTracker.add_thinking_step(session_id, "Initialize AI agent and task flow")
+
+            # Use wrapper to wrap LLM
+            if hasattr(agent, "llm"):
+                original_llm = agent.llm
+                wrapped_llm = LLMCallbackWrapper(original_llm)
+
+                # Register callback functions
+                def on_before_request(data):
+                    # Extract request content
+                    prompt_content = None
+                    if data.get("args") and len(data["args"]) > 0:
+                        prompt_content = str(data["args"][0])
+                    elif data.get("kwargs") and "prompt" in data["kwargs"]:
+                        prompt_content = data["kwargs"]["prompt"]
+                    else:
+                        prompt_content = str(data)
+
+                    # Record communication content
+                    print(f"Sent to LLM: {prompt_content[:100]}...")
+                    ThinkingTracker.add_communication(
+                        session_id, "Sent to LLM", prompt_content
+                    )
+
+                def on_after_request(data):
+                    # Extract response content
+                    response = data.get("response", "")
+                    response_content = ""
+
+                    # Try to extract text content from different formats
+                    if isinstance(response, str):
+                        response_content = response
+                    elif isinstance(response, dict):
+                        if "content" in response:
+                            response_content = response["content"]
+                        elif "text" in response:
+                            response_content = response["text"]
+                        else:
+                            response_content = str(response)
+                    elif hasattr(response, "content"):
+                        response_content = response.content
                     else:
                         response_content = str(response)
-                elif hasattr(response, "content"):
-                    response_content = response.content
-                else:
-                    response_content = str(response)
 
-                # Record communication content
-                print(f"Received from LLM: {response_content[:100]}...")
-                ThinkingTracker.add_communication(
-                    session_id, "Received from LLM", response_content
-                )
+                    # Record communication content
+                    print(f"Received from LLM: {response_content[:100]}...")
+                    ThinkingTracker.add_communication(
+                        session_id, "Received from LLM", response_content
+                    )
 
-            # Register callback
-            wrapped_llm.register_callback("before_request", on_before_request)
-            wrapped_llm.register_callback("after_request", on_after_request)
+                # Register callback
+                wrapped_llm.register_callback("before_request", on_before_request)
+                wrapped_llm.register_callback("after_request", on_after_request)
 
-            # Replace original LLM
-            agent.llm = wrapped_llm
+                # Replace original LLM
+                agent.llm = wrapped_llm
 
-        flow = FlowFactory.create_flow(
-            flow_type=FlowType.PLANNING,
-            agents=agent,
-        )
-
-        # Record processing start
-        ThinkingTracker.add_thinking_step(
-            session_id, f"Analyze user request: {prompt[:50]}{'...' if len(prompt) > 50 else ''}"
-        )
-        log_capture.info(f"Start executing: {prompt[:50]}{'...' if len(prompt) > 50 else ''}")
-
-        # Check if task is canceled
-        cancel_event = cancel_events.get(session_id)
-        if cancel_event and cancel_event.is_set():
-            log_capture.warning("Processing canceled by user")
-            ThinkingTracker.mark_stopped(session_id)
-            active_sessions[session_id]["status"] = "stopped"
-            active_sessions[session_id]["result"] = "Processing stopped by user"
-            return
-
-        # Check existing files in workspace before execution
-        existing_files = set()
-        for ext in ["*.txt", "*.md", "*.html", "*.css", "*.js", "*.py", "*.json"]:
-            existing_files.update(f.name for f in workspace_path.glob(ext))
-
-        # Track plan creation process
-        ThinkingTracker.add_thinking_step(session_id, "Create task execution plan")
-        ThinkingTracker.add_thinking_step(session_id, "Start executing task plan")
-
-        # Get cancel event to pass to flow.execute
-        cancel_event = cancel_events.get(session_id)
-
-        # Initial check, if already canceled then do not execute
-        if cancel_event and cancel_event.is_set():
-            log_capture.warning("Processing canceled by user")
-            ThinkingTracker.mark_stopped(session_id)
-            active_sessions[session_id]["status"] = "stopped"
-            active_sessions[session_id]["result"] = "Processing stopped by user"
-            return
-
-        # Execute actual processing - pass job_id and cancel_event to flow.execute method
-        result = await flow.execute(prompt, job_id, cancel_event)
-
-        # Check newly generated files after execution
-        new_files = set()
-        for ext in ["*.txt", "*.md", "*.html", "*.css", "*.js", "*.py", "*.json"]:
-            new_files.update(f.name for f in workspace_path.glob(ext))
-        newly_created = new_files - existing_files
-
-        if newly_created:
-            files_list = ", ".join(newly_created)
-            ThinkingTracker.add_thinking_step(
-                session_id,
-                f"Generated {len(newly_created)} files in workspace {workspace_path.name}: {files_list}",
+            flow = FlowFactory.create_flow(
+                flow_type=FlowType.PLANNING,
+                agents=agent,
             )
-            # Also add file list to session result
-            active_sessions[session_id]["generated_files"] = list(newly_created)
 
-        # Record completion status
-        log_capture.info("Processing completed")
-        ThinkingTracker.add_conclusion(
-            session_id, f"Task processing completed! Results generated in workspace {workspace_path.name}."
-        )
+            # Record processing start
+            ThinkingTracker.add_thinking_step(
+                session_id, f"Analyze user request: {prompt[:50]}{'...' if len(prompt) > 50 else ''}"
+            )
+            log_capture.info(f"Start executing: {prompt[:50]}{'...' if len(prompt) > 50 else ''}")
 
-        # Store result in memory if available
-        if memory_agent and result:
-            try:
-                memory_agent.add_memory({
-                    "content": result,
-                    "source": "agent_response",
-                    "metadata": {
-                        "session_id": session_id,
-                        "timestamp": time.time(),
-                        "for_query": prompt[:100] + ("..." if len(prompt) > 100 else "")
-                    }
-                })
-                logger.info(f"Stored agent response in memory: {result[:50]}...")
-            except Exception as e:
-                logger.error(f"Failed to store agent response in memory: {e}")
+            # Check if task is canceled
+            cancel_event = cancel_events.get(session_id)
+            if cancel_event and cancel_event.is_set():
+                log_capture.warning("Processing canceled by user")
+                ThinkingTracker.mark_stopped(session_id)
+                active_sessions[session_id]["status"] = "stopped"
+                active_sessions[session_id]["result"] = "Processing stopped by user"
+                return
 
-        # Return the results
-        active_sessions[session_id]["status"] = "completed"
-        active_sessions[session_id]["result"] = result
-        active_sessions[session_id][
-            "thinking_steps"
-        ] = ThinkingTracker.get_thinking_steps(session_id)
+            # Check existing files in workspace before execution
+            existing_files = set()
+            for ext in ["*.txt", "*.md", "*.html", "*.css", "*.js", "*.py", "*.json"]:
+                existing_files.update(f.name for f in workspace_path.glob(ext))
 
-    except asyncio.CancelledError:
-        # Handle cancellation
-        print("Processing canceled")
-        ThinkingTracker.mark_stopped(session_id)
-        active_sessions[session_id]["status"] = "stopped"
-        active_sessions[session_id]["result"] = "Processing canceled"
-    except Exception as e:
-        # Handle error
-        error_msg = f"Processing error: {str(e)}"
-        print(error_msg)
-        ThinkingTracker.add_error(session_id, f"Processing encountered error: {str(e)}")
-        active_sessions[session_id]["status"] = "error"
-        active_sessions[session_id]["result"] = f"Error: {str(e)}"
-    finally:
-        # Restore original working directory
-        os.chdir(os.getcwd())
+            # Track plan creation process
+            ThinkingTracker.add_thinking_step(session_id, "Create task execution plan")
+            ThinkingTracker.add_thinking_step(session_id, "Start executing task plan")
 
-        # Clear log file environment variable
-        if "SITH_LOG_FILE" in os.environ:
-            del os.environ["SITH_LOG_FILE"]
-        if "SITH_TASK_ID" in os.environ:
-            del os.environ["SITH_TASK_ID"]
+            # Get cancel event to pass to flow.execute
+            cancel_event = cancel_events.get(session_id)
 
-        # Clean up resources
-        if (
-            "agent" in locals()
-            and hasattr(agent, "llm")
-            and isinstance(agent.llm, LLMCallbackWrapper)
-        ):
-            try:
-                # Properly remove callback
-                if "on_before_request" in locals():
-                    agent.llm._callbacks["before_request"].remove(on_before_request)
-                if "on_after_request" in locals():
-                    agent.llm._callbacks["after_request"].remove(on_after_request)
-            except (ValueError, Exception) as e:
-                print(f"Error cleaning up callback: {str(e)}")
+            # Initial check, if already canceled then do not execute
+            if cancel_event and cancel_event.is_set():
+                log_capture.warning("Processing canceled by user")
+                ThinkingTracker.mark_stopped(session_id)
+                active_sessions[session_id]["status"] = "stopped"
+                active_sessions[session_id]["result"] = "Processing stopped by user"
+                return
 
-        # Clean up cancel event
-        if session_id in cancel_events:
-            del cancel_events[session_id]
+            # Execute actual processing - pass job_id and cancel_event to flow.execute method
+            result = await flow.execute(prompt, job_id, cancel_event)
 
-        # If monitor exists, stop monitoring
-        if session_id in active_log_monitors:
-            observer.stop()
-            observer.join(timeout=1)
-            del active_log_monitors[session_id]
+            # Check newly generated files after execution
+            new_files = set()
+            for ext in ["*.txt", "*.md", "*.html", "*.css", "*.js", "*.py", "*.json"]:
+                new_files.update(f.name for f in workspace_path.glob(ext))
+            newly_created = new_files - existing_files
 
-        # Cancel log synchronization task
-        if sync_task:
-            sync_task.cancel()
-            try:
-                await sync_task
-            except asyncio.CancelledError:
-                pass
+            if newly_created:
+                files_list = ", ".join(newly_created)
+                ThinkingTracker.add_thinking_step(
+                    session_id,
+                    f"Generated {len(newly_created)} files in workspace {workspace_path.name}: {files_list}",
+                )
+                # Also add file list to session result
+                active_sessions[session_id]["generated_files"] = list(newly_created)
+
+            # Record completion status
+            log_capture.info("Processing completed")
+            ThinkingTracker.add_conclusion(
+                session_id, f"Task processing completed! Results generated in workspace {workspace_path.name}."
+            )
+
+            # Store result in memory if available, with duplicate prevention
+            if memory_agent and result:
+                try:
+                    result_key = f"result:{session_id}:{result[:30]}"
+                    if result_key not in request_cache:
+                        request_cache[result_key] = True
+                        memory_agent.add_memory({
+                            "content": result,
+                            "source": "agent_response",
+                            "metadata": {
+                                "session_id": session_id,
+                                "timestamp": time.time(),
+                                "for_query": prompt[:100] + ("..." if len(prompt) > 100 else "")
+                            }
+                        })
+                        logger.info(f"Stored agent response in memory: {result[:50]}...")
+                    else:
+                        logger.warning(f"Skipping duplicate result memory addition: {result_key}")
+                except Exception as e:
+                    logger.error(f"Failed to store agent response in memory: {e}")
+
+            # Return the results
+            active_sessions[session_id]["status"] = "completed"
+            active_sessions[session_id]["result"] = result
+            active_sessions[session_id][
+                "thinking_steps"
+            ] = ThinkingTracker.get_thinking_steps(session_id)
+
+        except asyncio.CancelledError:
+            # Handle cancellation
+            print("Processing canceled")
+            ThinkingTracker.mark_stopped(session_id)
+            active_sessions[session_id]["status"] = "stopped"
+            active_sessions[session_id]["result"] = "Processing canceled"
+        except Exception as e:
+            # Handle error
+            error_msg = f"Processing error: {str(e)}"
+            print(error_msg)
+            ThinkingTracker.add_error(session_id, f"Processing encountered error: {str(e)}")
+            active_sessions[session_id]["status"] = "error"
+            active_sessions[session_id]["result"] = f"Error: {str(e)}"
+        finally:
+            # Restore original working directory
+            os.chdir(os.getcwd())
+
+            # Clear log file environment variable
+            if "SITH_LOG_FILE" in os.environ:
+                del os.environ["SITH_LOG_FILE"]
+            if "SITH_TASK_ID" in os.environ:
+                del os.environ["SITH_TASK_ID"]
+
+            # Clean up resources
+            if (
+                "agent" in locals()
+                and hasattr(agent, "llm")
+                and isinstance(agent.llm, LLMCallbackWrapper)
+            ):
+                try:
+                    # Properly remove callback
+                    if "on_before_request" in locals():
+                        agent.llm._callbacks["before_request"].remove(on_before_request)
+                    if "on_after_request" in locals():
+                        agent.llm._callbacks["after_request"].remove(on_after_request)
+                except (ValueError, Exception) as e:
+                    print(f"Error cleaning up callback: {str(e)}")
+
+            # Clean up cancel event
+            if session_id in cancel_events:
+                del cancel_events[session_id]
+
+            # If monitor exists, stop monitoring
+            if session_id in active_log_monitors:
+                observer.stop()
+                observer.join(timeout=1)
+                del active_log_monitors[session_id]
+
+            # Cancel log synchronization task
+            if sync_task:
+                sync_task.cancel()
+                try:
+                    await sync_task
+                except asyncio.CancelledError:
+                    pass
+            
+    # After the with block completes, clear this request from the cache after a while
+    cache_cleanup_time = 300  # 5 minutes
+    request_cache[request_id]["status"] = "completed"
+    
+    # Start a background task to clear this entry from cache
+    async def clear_cache_entry():
+        await asyncio.sleep(cache_cleanup_time)
+        if request_id in request_cache:
+            del request_cache[request_id]
+    
+    asyncio.create_task(clear_cache_entry())
+
+
+# Simple log handler class
+class SimpleLogHandler:
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        
+    def info(self, message: str):
+        logger.info(message)
+        
+    def warning(self, message: str):
+        logger.warning(message)
+        
+    def error(self, message: str):
+        logger.error(message)
+        
+    def debug(self, message: str):
+        logger.debug(message)
 
 
 # Add new API endpoint to get thinking steps

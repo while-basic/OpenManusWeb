@@ -120,3 +120,36 @@ def clear_logs(session_id: str) -> None:
     with _lock:
         if session_id in session_logs:
             session_logs[session_id] = []
+
+
+class LogFileHandler:
+    """
+    Handles file-based logging for a specific session
+    """
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        logger.info(f"Log handler initialized for session {session_id}")
+    
+    def log(self, level: str, message: str) -> None:
+        """Add a log entry for the session"""
+        add_log(self.session_id, level, message)
+        
+    def info(self, message: str) -> None:
+        """Log an info message"""
+        self.log("INFO", message)
+        logger.info(message)
+        
+    def warning(self, message: str) -> None:
+        """Log a warning message"""
+        self.log("WARNING", message)
+        logger.warning(message)
+        
+    def error(self, message: str) -> None:
+        """Log an error message"""
+        self.log("ERROR", message)
+        logger.error(message)
+        
+    def debug(self, message: str) -> None:
+        """Log a debug message"""
+        self.log("DEBUG", message)
+        logger.debug(message)
